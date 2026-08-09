@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-navy-dark: #071735;
+  --color-navy-deep: #0B1B3A;
+  --color-purple: #6739F5;
+  --color-purple-bright: #7C3AED;
+  --color-blue: #1677FF;
+  --color-green: #16B981;
+  --color-orange: #F59E0B;
+  --color-pink: #F472B6;
+  --color-purple-light: #F4F0FF;
+  --color-dark-text: #101828;
+  --color-gray-text: #667085;
+  
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+:root {
+  --background: #F4F0FF; /* Light Purple Background */
+  --foreground: #101828; /* Dark Text */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #071735; /* Dark Navy */
+    --foreground: #F4F0FF; /* Light Purple */
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
