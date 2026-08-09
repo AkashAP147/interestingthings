@@ -50,3 +50,5 @@ export async function deleteDiscovery(id: string): Promise<void> {
   const filtered = discoveries.filter(d => d.id !== id);
   await writeDB(filtered);
 }
+
+// Vercel TS cache invalidation

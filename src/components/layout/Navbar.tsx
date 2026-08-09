@@ -157,3 +157,5 @@ export function Navbar() {
     </header>
   );
 }
+
+// Vercel TS cache invalidation
