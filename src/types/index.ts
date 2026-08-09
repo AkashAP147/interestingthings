@@ -23,7 +23,7 @@ export type Discovery = {
   shares: number;
   createdAt: string;
   publishedAt: string;
-  status: "published" | "draft" | "archived";
+  status: "published" | "draft" | "archived" | "pending_approval";
   featured: boolean;
 };
 

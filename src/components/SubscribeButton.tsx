@@ -4,12 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Sparkles, CheckCircle2 } from "lucide-react";
 import React from "react";
 
-interface SubscribeButtonProps {
-  className?: string;
-  variant?: "primary" | "nav" | "footer";
+interface SubscribeButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "primary" | "nav" | "footer" | "mobile";
 }
 
-export function SubscribeButton({ className, variant = "primary" }: SubscribeButtonProps) {
+export function SubscribeButton({ className, variant = "primary", onClick, ...props }: SubscribeButtonProps) {
   const { user, openModal } = useAuth();
 
   if (user) {
@@ -32,10 +31,19 @@ export function SubscribeButton({ className, variant = "primary" }: SubscribeBut
     styles = "hidden md:inline-flex bg-purple text-white px-5 py-2.5 text-sm hover:bg-purple-bright hover:shadow-md";
   } else if (variant === "footer") {
     styles = "bg-purple text-white px-6 py-3 hover:bg-purple-bright";
+  } else if (variant === "mobile") {
+    styles = "flex w-full justify-center bg-purple text-white px-5 py-2.5 text-base hover:bg-purple-bright hover:shadow-md";
   }
 
   return (
-    <button onClick={openModal} className={`${baseStyles} ${styles} ${className || ""}`}>
+    <button 
+      onClick={(e) => {
+        if (onClick) onClick(e);
+        openModal();
+      }} 
+      className={`${baseStyles} ${styles} ${className || ""}`}
+      {...props}
+    >
       Subscribe <Sparkles className="h-4 w-4" />
     </button>
   );
