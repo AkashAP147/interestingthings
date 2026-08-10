@@ -92,9 +92,13 @@ export async function GET() {
           featured: false
         };
 
-        await addDiscovery(newDiscovery);
-        added.push(newDiscovery);
-        processed.push({ title: post.title, status: 'queued', score: aiAnalysis.score });
+        const isAdded = await addDiscovery(newDiscovery);
+        if (isAdded) {
+          added.push(newDiscovery);
+          processed.push({ title: post.title, status: 'queued', score: aiAnalysis.score });
+        } else {
+          processed.push({ title: post.title, status: 'skipped', reason: 'Duplicate URL detected at DB level' });
+        }
       } else {
         processed.push({ title: post.title, status: 'rejected', reason: 'Low AI Score', score: aiAnalysis.score });
       }

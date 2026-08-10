@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Terminal, Globe, Mail, Sparkles } from "lucide-react";
 import { CopyEmailButton } from "@/components/CopyEmailButton";
+import { AdminLoginForm } from "@/components/AdminLoginForm";
 
 export default function AboutPage() {
   return (
@@ -26,14 +27,16 @@ export default function AboutPage() {
           <div className="relative w-72 h-[400px] md:w-80 md:h-[450px] shrink-0 mx-auto md:mx-0">
             <div className="absolute inset-0 bg-gradient-to-tr from-purple via-blue to-green rounded-3xl blur-2xl opacity-30 animate-pulse"></div>
             <div className="relative w-full h-full rounded-3xl border-4 border-white dark:border-navy-dark shadow-2xl overflow-hidden bg-purple-light/20">
-              <Image 
-                src="/akash.jpg" 
-                alt="Akash - Developer" 
-                fill 
-                className="object-cover object-center hover:scale-105 transition-transform duration-700"
-                sizes="(max-width: 768px) 288px, 320px"
-                priority
-              />
+              <AdminLoginForm>
+                <Image 
+                  src="/akash.jpg" 
+                  alt="Akash - Developer" 
+                  fill 
+                  className="object-cover object-center hover:scale-105 transition-transform duration-700"
+                  sizes="(max-width: 768px) 288px, 320px"
+                  priority
+                />
+              </AdminLoginForm>
             </div>
           </div>
 

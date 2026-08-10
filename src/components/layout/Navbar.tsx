@@ -88,7 +88,12 @@ export function Navbar() {
             <SubscribeButton variant="nav" />
           ) : (
             <div className="flex items-center gap-4">
-              <span className="text-sm font-semibold text-purple">Hi, User!</span>
+              {user?.contact?.toLowerCase() === "akash" && (
+                <Link href="/admin" className="text-sm font-semibold text-purple-bright hover:text-purple transition-colors">
+                  Admin Panel
+                </Link>
+              )}
+              <span className="text-sm font-semibold text-purple">Hi, {user?.contact || "User"}!</span>
               <button 
                 onClick={logout}
                 className="text-sm font-semibold text-gray-text hover:text-red-500 transition-colors"
@@ -142,12 +147,26 @@ export function Navbar() {
                 {!user ? (
                   <SubscribeButton variant="mobile" onClick={() => setMobileMenuOpen(false)} />
                 ) : (
-                  <button 
-                    onClick={() => { logout(); setMobileMenuOpen(false); }}
-                    className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-gray-text hover:bg-red-50"
-                  >
-                    Logout
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    {user?.contact?.toLowerCase() === "akash" && (
+                      <Link 
+                        href="/admin"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-purple-bright hover:bg-purple-light/20"
+                      >
+                        Admin Panel
+                      </Link>
+                    )}
+                    <div className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-purple">
+                      Hi, {user?.contact || "User"}!
+                    </div>
+                    <button 
+                      onClick={() => { logout(); setMobileMenuOpen(false); }}
+                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-gray-text hover:bg-red-50"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

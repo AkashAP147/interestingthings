@@ -1,5 +1,4 @@
-import fs from 'fs/promises';
-import path from 'path';
+import { firestore } from './firebase';
 
 export interface User {
   id: string;
@@ -10,12 +9,14 @@ export interface User {
   joinedAt: string;
 }
 
-const DB_PATH = path.join(process.cwd(), 'database', 'users.json');
+const COLLECTION = 'users';
 
 export async function readUsersDB(): Promise<User[]> {
   try {
-    const data = await fs.readFile(DB_PATH, 'utf-8');
-    return JSON.parse(data);
+    const snapshot = await firestore.collection(COLLECTION).get();
+    const users: User[] = [];
+    snapshot.forEach(doc => users.push(doc.data() as User));
+    return users;
   } catch (error) {
     console.error("Failed to read users DB:", error);
     return [];
@@ -23,17 +24,14 @@ export async function readUsersDB(): Promise<User[]> {
 }
 
 export async function writeUsersDB(users: User[]): Promise<void> {
-  try {
-    await fs.writeFile(DB_PATH, JSON.stringify(users, null, 2), 'utf-8');
-  } catch (error) {
-    console.error("Failed to write to users DB:", error);
-  }
+  // Not used in Firebase implementation
 }
 
 export async function findOrCreateUser(contact: string): Promise<User> {
-  const users = await readUsersDB();
-  const existing = users.find(u => u.contact === contact);
-  if (existing) return existing;
+  const snapshot = await firestore.collection(COLLECTION).where('contact', '==', contact).limit(1).get();
+  if (!snapshot.empty) {
+    return snapshot.docs[0].data() as User;
+  }
 
   const newUser: User = {
     id: `u-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -44,32 +42,33 @@ export async function findOrCreateUser(contact: string): Promise<User> {
     joinedAt: new Date().toISOString()
   };
 
-  users.push(newUser);
-  await writeUsersDB(users);
+  await firestore.collection(COLLECTION).doc(newUser.id).set(newUser);
   return newUser;
 }
 
 export async function verifyUser(id: string): Promise<User | null> {
-  const users = await readUsersDB();
-  const userIndex = users.findIndex(u => u.id === id);
-  if (userIndex === -1) return null;
-
-  users[userIndex].verified = true;
-  await writeUsersDB(users);
-  return users[userIndex];
+  const docRef = firestore.collection(COLLECTION).doc(id);
+  const docSnap = await docRef.get();
+  if (!docSnap.exists) return null;
+  
+  await docRef.update({ verified: true });
+  const updatedSnap = await docRef.get();
+  return updatedSnap.data() as User;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const users = await readUsersDB();
-  return users.find(u => u.id === id) || null;
+  const docRef = firestore.collection(COLLECTION).doc(id);
+  const docSnap = await docRef.get();
+  if (!docSnap.exists) return null;
+  return docSnap.data() as User;
 }
 
 export async function toggleLike(userId: string, discoveryId: string): Promise<{ liked: boolean; user: User | null }> {
-  const users = await readUsersDB();
-  const userIndex = users.findIndex(u => u.id === userId);
-  if (userIndex === -1) return { liked: false, user: null };
-
-  const user = users[userIndex];
+  const docRef = firestore.collection(COLLECTION).doc(userId);
+  const docSnap = await docRef.get();
+  if (!docSnap.exists) return { liked: false, user: null };
+  
+  const user = docSnap.data() as User;
   const likeIndex = user.likes.indexOf(discoveryId);
   let liked = false;
   
@@ -80,6 +79,6 @@ export async function toggleLike(userId: string, discoveryId: string): Promise<{
     user.likes.splice(likeIndex, 1);
   }
 
-  await writeUsersDB(users);
+  await docRef.update({ likes: user.likes });
   return { liked, user };
 }

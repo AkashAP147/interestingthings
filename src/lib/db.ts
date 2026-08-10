@@ -1,13 +1,15 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { Discovery } from '@/types';
+import { firestore } from './firebase';
 
-const DB_PATH = path.join(process.cwd(), 'database', 'discoveries.json');
+const COLLECTION = 'discoveries';
 
 export async function readDB(): Promise<Discovery[]> {
   try {
-    const data = await fs.readFile(DB_PATH, 'utf-8');
-    return JSON.parse(data);
+    const snapshot = await firestore.collection(COLLECTION).get();
+    const discoveries: Discovery[] = [];
+    snapshot.forEach((doc) => discoveries.push(doc.data() as Discovery));
+    // Sort by createdAt descending
+    return discoveries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
     console.error("Failed to read DB:", error);
     return [];
@@ -15,40 +17,33 @@ export async function readDB(): Promise<Discovery[]> {
 }
 
 export async function writeDB(discoveries: Discovery[]): Promise<void> {
-  try {
-    await fs.writeFile(DB_PATH, JSON.stringify(discoveries, null, 2), 'utf-8');
-  } catch (error) {
-    console.error("Failed to write to DB:", error);
-  }
+  // Not used in Firebase implementation
 }
 
-export async function addDiscovery(discovery: Discovery): Promise<void> {
-  const discoveries = await readDB();
-  discoveries.unshift(discovery);
-  await writeDB(discoveries);
+export async function addDiscovery(discovery: Discovery): Promise<boolean> {
+  const snapshot = await firestore.collection(COLLECTION).where('sourceUrl', '==', discovery.sourceUrl).limit(1).get();
+  if (!snapshot.empty) {
+    return false; // Prevent duplicate
+  }
+  await firestore.collection(COLLECTION).doc(discovery.id).set(discovery);
+  return true;
 }
 
 export async function updateDiscoveryStatus(id: string, status: 'published' | 'draft' | 'pending_approval' | 'archived'): Promise<void> {
-  const discoveries = await readDB();
-  const index = discoveries.findIndex(d => d.id === id);
-  if (index !== -1) {
-    discoveries[index].status = status;
-    if (status === 'published') {
-      discoveries[index].publishedAt = new Date().toISOString();
-    }
-    await writeDB(discoveries);
+  const updateData: any = { status };
+  if (status === 'published') {
+    updateData.publishedAt = new Date().toISOString();
   }
+  await firestore.collection(COLLECTION).doc(id).update(updateData);
 }
 
 export async function getPendingDiscoveries(): Promise<Discovery[]> {
-  const discoveries = await readDB();
-  return discoveries.filter(d => d.status === 'pending_approval');
+  const snapshot = await firestore.collection(COLLECTION).where('status', '==', 'pending_approval').get();
+  const discoveries: Discovery[] = [];
+  snapshot.forEach((doc) => discoveries.push(doc.data() as Discovery));
+  return discoveries;
 }
 
 export async function deleteDiscovery(id: string): Promise<void> {
-  const discoveries = await readDB();
-  const filtered = discoveries.filter(d => d.id !== id);
-  await writeDB(filtered);
+  await firestore.collection(COLLECTION).doc(id).delete();
 }
-
-// Vercel TS cache invalidation
