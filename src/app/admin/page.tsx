@@ -1,6 +1,7 @@
 import { Plus, CheckCircle2, Bot } from "lucide-react";
 import Link from "next/link";
-import { getPendingDiscoveries, readDB } from "@/lib/db";
+import { AdminMessages } from "@/components/AdminMessages";
+import { getPendingDiscoveries, readDB, getContactMessages } from "@/lib/db";
 import { AdminQueue } from "@/components/AdminQueue";
 import { AdminTable } from "@/components/AdminTable";
 import { RunScraperButton } from "@/components/RunScraperButton";
@@ -8,6 +9,7 @@ import { RunScraperButton } from "@/components/RunScraperButton";
 export default async function AdminPage() {
   const pending = await getPendingDiscoveries();
   const allData = await readDB();
+  const messages = await getContactMessages();
   const allPublished = allData.filter(d => d.status === "published");
   return (
     <div className="px-6 lg:px-12 max-w-[1600px] mx-auto w-full py-12 flex flex-col gap-12">
@@ -28,6 +30,8 @@ export default async function AdminPage() {
 
       <div className="flex flex-col gap-8">
 
+        {/* Notifications / Inbox */}
+        <AdminMessages initialMessages={messages} />
 
         {/* AI Approval Queue */}
         <div className="flex flex-col gap-6">

@@ -1,0 +1,28 @@
+import React from 'react';
+
+export function Logo({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" className={className}>
+      <defs>
+        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#071735" />   {/* Navy Dark */}
+          <stop offset="50%" stopColor="#6739F5" />  {/* Purple */}
+          <stop offset="100%" stopColor="#F472B6" /> {/* Pink */}
+        </linearGradient>
+      </defs>
+
+      {/* Background */}
+      <rect width="256" height="256" rx="56" fill="url(#logoGrad)" />
+      
+      {/* Internet Globe Graphic */}
+      <g stroke="#ffffff" strokeWidth="20" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="120" cy="136" r="68" />
+        <ellipse cx="120" cy="136" rx="28" ry="68" />
+        <line x1="52" y1="136" x2="188" y2="136" />
+      </g>
+      
+      {/* Golden Sparkle */}
+      <path d="M192 32 C192 56 216 80 240 80 C216 80 192 104 192 128 C192 104 168 80 144 80 C168 80 192 56 192 32 Z" fill="#F59E0B" />
+    </svg>
+  );
+}

@@ -47,3 +47,28 @@ export async function getPendingDiscoveries(): Promise<Discovery[]> {
 export async function deleteDiscovery(id: string): Promise<void> {
   await firestore.collection(COLLECTION).doc(id).delete();
 }
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  createdAt: string;
+  status: 'unread' | 'read';
+}
+
+export async function getContactMessages(): Promise<ContactMessage[]> {
+  try {
+    const snapshot = await firestore.collection("messages").orderBy("createdAt", "desc").get();
+    const messages: ContactMessage[] = [];
+    snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() } as ContactMessage));
+    return messages;
+  } catch (error) {
+    console.error("Failed to read messages DB:", error);
+    return [];
+  }
+}
+
+export async function markMessageRead(id: string): Promise<void> {
+  await firestore.collection("messages").doc(id).update({ status: 'read' });
+}

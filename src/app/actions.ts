@@ -140,3 +140,29 @@ export async function manualAddDiscoveryAction(formData: FormData) {
   
   return { success: true };
 }
+
+export async function submitContactMessage(formData: FormData) {
+  const name = formData.get("name") as string;
+  const email = formData.get("email") as string;
+  const message = formData.get("message") as string;
+  
+  if (!name || !email || !message) return { success: false, error: "Missing fields" };
+  
+  const { firestore } = await import("@/lib/firebase");
+  
+  await firestore.collection("messages").add({
+    name,
+    email,
+    message,
+    createdAt: new Date().toISOString(),
+    status: "unread"
+  });
+  
+  return { success: true };
+}
+
+export async function markMessageReadAction(id: string) {
+  const { markMessageRead } = await import("@/lib/db");
+  await markMessageRead(id);
+  revalidatePath("/admin");
+}

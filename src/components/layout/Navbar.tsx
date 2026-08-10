@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Menu, X, Globe, Sparkles } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscribeButton";
 import { useAuth } from "@/contexts/AuthContext";
+import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +15,7 @@ const navigation = [
   { name: "Trending", href: "/trending" },
   { name: "Random", href: "/random" },
   { name: "About", href: "/about" },
+  { name: "Contact", href: "/contact" },
 ];
 
 export function Navbar() {
@@ -36,9 +38,9 @@ export function Navbar() {
         
         {/* Logo (Left) */}
         <div className="flex lg:flex-1">
-          <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-2 group">
-            <div className="bg-purple text-white p-2 rounded-xl group-hover:bg-purple-bright transition-colors">
-              <Globe className="h-5 w-5" />
+          <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-3 group">
+            <div className="group-hover:scale-105 transition-transform duration-300">
+              <Logo className="h-10 w-10 shadow-sm rounded-xl" />
             </div>
             <span className="font-heading font-bold text-lg text-navy-dark dark:text-white tracking-tight hidden sm:block">
               The Internet’s Most Interesting Things
