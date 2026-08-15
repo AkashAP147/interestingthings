@@ -158,6 +158,9 @@ export async function submitContactMessage(formData: FormData) {
     status: "unread"
   });
   
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/admin");
+  
   return { success: true };
 }
 

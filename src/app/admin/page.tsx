@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { Plus, CheckCircle2, Bot } from "lucide-react";
 import Link from "next/link";
 import { AdminMessages } from "@/components/AdminMessages";
