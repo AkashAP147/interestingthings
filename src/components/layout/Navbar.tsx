@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, X, Globe, Sparkles } from "lucide-react";
+import { Menu, X, Globe, Sparkles, User as UserIcon } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscribeButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { Logo } from "@/components/Logo";
@@ -95,10 +95,21 @@ export function Navbar() {
                   Admin Panel
                 </Link>
               )}
-              <span className="text-sm font-semibold text-purple">Hi, {user?.contact || "User"}!</span>
+              <Link href="/profile" className="flex items-center gap-2 group">
+                <div className="h-8 w-8 rounded-full overflow-hidden bg-purple-light/20 border-2 border-transparent group-hover:border-purple transition-colors flex items-center justify-center">
+                  {user.profilePicture ? (
+                    <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <UserIcon className="h-4 w-4 text-purple" />
+                  )}
+                </div>
+                <span className="text-sm font-semibold text-navy-dark dark:text-white group-hover:text-purple transition-colors">
+                  {user.username || user.name || "Profile"}
+                </span>
+              </Link>
               <button 
                 onClick={logout}
-                className="text-sm font-semibold text-gray-text hover:text-red-500 transition-colors"
+                className="text-sm font-semibold text-gray-text hover:text-red-500 transition-colors ml-2 border-l border-gray-200 dark:border-gray-800 pl-4"
               >
                 Logout
               </button>
@@ -159,12 +170,23 @@ export function Navbar() {
                         Admin Panel
                       </Link>
                     )}
-                    <div className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-purple">
-                      Hi, {user?.contact || "User"}!
-                    </div>
+                    <Link 
+                      href="/profile"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="-mx-3 flex items-center gap-3 rounded-lg px-3 py-2 text-base font-semibold leading-7 text-navy-dark dark:text-white hover:bg-purple-light/20"
+                    >
+                      <div className="h-8 w-8 rounded-full overflow-hidden bg-purple-light/20 flex items-center justify-center">
+                        {user.profilePicture ? (
+                          <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+                        ) : (
+                          <UserIcon className="h-4 w-4 text-purple" />
+                        )}
+                      </div>
+                      My Profile
+                    </Link>
                     <button 
                       onClick={() => { logout(); setMobileMenuOpen(false); }}
-                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-gray-text hover:bg-red-50"
+                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-gray-text hover:bg-red-50 text-left"
                     >
                       Logout
                     </button>

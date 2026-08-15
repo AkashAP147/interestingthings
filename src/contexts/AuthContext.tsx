@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { getCurrentUserAction, logoutAction } from "@/app/actions";
+import { getCurrentUserAction, syncAuthTokenAction } from "@/app/actions";
 import { User } from "@/lib/user-db";
+import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { auth } from "@/lib/firebase-client";
 
 interface AuthContextType {
   user: User | null;
@@ -34,15 +36,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    refreshUser();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsLoading(true);
+      try {
+        if (firebaseUser) {
+          const token = await firebaseUser.getIdToken();
+          await syncAuthTokenAction(token);
+          await refreshUser();
+        } else {
+          await syncAuthTokenAction(null);
+          setUser(null);
+        }
+      } catch (error) {
+        console.error("Auth sync error", error);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
 
   const logout = async () => {
-    await logoutAction();
-    setUser(null);
+    await signOut(auth);
+    // syncAuthTokenAction(null) will be called by the listener
   };
 
   return (

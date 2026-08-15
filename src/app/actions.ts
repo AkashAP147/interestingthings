@@ -1,7 +1,7 @@
 "use server";
 
 import { updateDiscoveryStatus, deleteDiscovery } from "@/lib/db";
-import { findOrCreateUser, verifyUser, toggleLike } from "@/lib/user-db";
+import { findOrCreateUser, verifyUser, toggleLike, getUserByIdentifier, isUsernameTaken, updateUserProfile } from "@/lib/user-db";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
@@ -32,11 +32,33 @@ export async function deleteDiscoveryAction(id: string) {
   return { success: true };
 }
 
-export async function requestAuthAction(contact: string) {
-  // Step 1: Create or find unverified user
-  const user = await findOrCreateUser(contact);
-  // In a real app, send email/SMS here.
-  return { success: true, userId: user.id };
+export async function syncAuthTokenAction(idToken: string | null) {
+  const cookieStore = await cookies();
+  if (!idToken) {
+    cookieStore.delete("auth_user");
+    return { success: true };
+  }
+
+  try {
+    await import("@/lib/firebase"); // Ensure admin is initialized
+    const { getAuth } = await import("firebase-admin/auth");
+    
+    const decoded = await getAuth().verifyIdToken(idToken);
+    
+    const { syncFirebaseUser } = await import("@/lib/user-db");
+    await syncFirebaseUser(decoded.uid, decoded.email || decoded.phone_number || "unknown");
+
+    cookieStore.set("auth_user", decoded.uid, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: "/",
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Token verification failed", error);
+    return { success: false, error: "Authentication failed" };
+  }
 }
 
 export async function adminLoginAction(id: string, pass: string) {
@@ -52,26 +74,6 @@ export async function adminLoginAction(id: string, pass: string) {
     return { success: true };
   }
   return { success: false, error: "Invalid admin credentials" };
-}
-
-export async function verifyAuthAction(userId: string, code: string) {
-  // Step 2: Verify code (mocking with '1234')
-  if (code !== "1234") {
-    return { success: false, error: "Invalid code" };
-  }
-  const user = await verifyUser(userId);
-  if (user) {
-    // Drop a secure cookie
-    const cookieStore = await cookies();
-    cookieStore.set("auth_user", user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: "/",
-    });
-    return { success: true, user };
-  }
-  return { success: false, error: "User not found" };
 }
 
 export async function logoutAction() {
@@ -168,4 +170,45 @@ export async function markMessageReadAction(id: string) {
   const { markMessageRead } = await import("@/lib/db");
   await markMessageRead(id);
   revalidatePath("/admin");
+}
+
+export async function updateUserProfileAction(formData: FormData) {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false, error: "Unauthorized" };
+
+  const name = formData.get("name") as string || "";
+  const username = formData.get("username") as string || "";
+  const contact = formData.get("contact") as string || "";
+  const profilePicture = formData.get("profilePicture") as string || "";
+
+  if (username) {
+    const taken = await isUsernameTaken(username, userId);
+    if (taken) {
+      return { success: false, error: "Username is already taken" };
+    }
+  }
+
+  if (contact) {
+    const existing = await getUserByIdentifier(contact);
+    if (existing && existing.id !== userId) {
+      return { success: false, error: "Contact (email/phone) is already used by another account" };
+    }
+  }
+
+  const updates = {
+    name,
+    username,
+    contact,
+    profilePicture,
+  };
+
+  const user = await updateUserProfile(userId, updates);
+  if (!user) {
+    return { success: false, error: "User not found" };
+  }
+
+  revalidatePath("/profile");
+  revalidatePath("/");
+  return { success: true, user };
 }
