@@ -162,3 +162,83 @@ export async function decryptMessage(
     return "[Encrypted Message - Unable to Decrypt]";
   }
 }
+
+// Multi-Recipient E2EE Protocol
+export async function encryptPayload(
+  text: string,
+  imageUrl: string | null,
+  publicKeysBase64: string[]
+) {
+  const payloadStr = JSON.stringify({ text, imageUrl });
+  const encodedText = getMessageEncoding(payloadStr);
+
+  const aesKey = await window.crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encryptedContent = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    aesKey,
+    encodedText
+  );
+
+  const exportedAesKey = await window.crypto.subtle.exportKey("raw", aesKey);
+
+  const encryptedKeys = await Promise.all(publicKeysBase64.map(async (pubKeyStr) => {
+    try {
+      const pubKey = await importKey(pubKeyStr, "public");
+      const encryptedKey = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, pubKey, exportedAesKey);
+      return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(encryptedKey))));
+    } catch(e) {
+      return null;
+    }
+  }));
+
+  return {
+    iv: btoa(String.fromCharCode.apply(null, Array.from(iv))),
+    ciphertext: btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(encryptedContent)))),
+    encryptedAesKeys: encryptedKeys
+  };
+}
+
+export async function decryptPayload(
+  payload: { iv: string; ciphertext: string; encryptedAesKeys: (string | null)[] },
+  myPrivateKeyBase64: string,
+  keyIndex: number
+) {
+  try {
+    const encryptedAesKeyStr = payload.encryptedAesKeys[keyIndex];
+    if (!encryptedAesKeyStr) return null;
+
+    const privateKey = await importKey(myPrivateKeyBase64, "private");
+    const encryptedAesKeyBuffer = new Uint8Array(atob(encryptedAesKeyStr).split("").map(c => c.charCodeAt(0)));
+    
+    const exportedAesKey = await window.crypto.subtle.decrypt(
+      { name: "RSA-OAEP" },
+      privateKey,
+      encryptedAesKeyBuffer
+    );
+
+    const aesKey = await window.crypto.subtle.importKey(
+      "raw", exportedAesKey, { name: "AES-GCM" }, true, ["decrypt"]
+    );
+
+    const iv = new Uint8Array(atob(payload.iv).split("").map(c => c.charCodeAt(0)));
+    const ciphertextBuffer = new Uint8Array(atob(payload.ciphertext).split("").map(c => c.charCodeAt(0)));
+    
+    const decryptedContent = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv },
+      aesKey,
+      ciphertextBuffer
+    );
+
+    const decodedStr = getMessageDecoding(decryptedContent);
+    return JSON.parse(decodedStr);
+  } catch (error) {
+    console.error("Payload decryption failed", error);
+    return null;
+  }
+}

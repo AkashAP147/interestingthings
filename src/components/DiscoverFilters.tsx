@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, ChevronDown, Filter } from "lucide-react";
 import { categories } from "@/lib/categories";
 import { useCallback, useState, useEffect } from "react";
 
@@ -53,60 +53,44 @@ export function DiscoverFilters() {
         <button type="submit" className="hidden">Search</button>
       </form>
 
-      {/* Category Filters */}
-      <div className="flex overflow-x-auto md:flex-wrap gap-2 mt-4 pb-2 -mx-6 px-6 md:mx-0 md:px-0 hide-scrollbar">
-        <button 
-          onClick={() => updateParams("category", "all")}
-          className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition-colors ${
-            currentCategory === "all" 
-              ? "bg-navy-dark dark:bg-white text-white dark:text-navy-dark" 
-              : "bg-white dark:bg-navy-deep text-gray-text ring-1 ring-inset ring-purple-light hover:bg-purple-light/50"
-          }`}
-        >
-          All
-        </button>
-        {categories.map(c => (
-          <button 
-            key={c.id} 
-            onClick={() => updateParams("category", c.id)}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition-colors ${
-              currentCategory === c.id 
-                ? "bg-navy-dark dark:bg-white text-white dark:text-navy-dark" 
-                : "bg-white dark:bg-navy-deep text-gray-text ring-1 ring-inset ring-purple-light hover:bg-purple-light/50"
-            }`}
+      {/* Filters & Sorting Dropdowns */}
+      <div className="flex flex-col sm:flex-row gap-4 mt-2 border-b border-purple-light/20 pb-6">
+        {/* Category Dropdown */}
+        <div className="relative flex-1 sm:max-w-xs">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <Filter className="h-4 w-4 text-purple" />
+          </div>
+          <select 
+            value={currentCategory}
+            onChange={(e) => updateParams("category", e.target.value)}
+            className="w-full appearance-none bg-white dark:bg-navy-deep text-navy-dark dark:text-white text-sm font-semibold rounded-xl border border-purple-light/50 py-2.5 pl-10 pr-10 shadow-sm focus:ring-2 focus:ring-purple focus:outline-none cursor-pointer"
           >
-            {c.name}
-          </button>
-        ))}
-      </div>
-      
-      {/* Sorting */}
-      <div className="flex items-center gap-4 mt-2 border-b border-purple-light/50 pb-4 text-sm font-medium text-gray-text overflow-x-auto hide-scrollbar -mx-6 px-6 md:mx-0 md:px-0">
-        <span className="shrink-0">Sort by:</span>
-        <button 
-          onClick={() => updateParams("sort", "newest")}
-          className={`shrink-0 transition-colors ${currentSort === "newest" ? "text-purple font-bold" : "hover:text-purple"}`}
-        >
-          Newest
-        </button>
-        <button 
-          onClick={() => updateParams("sort", "popular")}
-          className={`shrink-0 transition-colors ${currentSort === "popular" ? "text-purple font-bold" : "hover:text-purple"}`}
-        >
-          Most Popular
-        </button>
-        <button 
-          onClick={() => updateParams("sort", "saved")}
-          className={`shrink-0 transition-colors ${currentSort === "saved" ? "text-purple font-bold" : "hover:text-purple"}`}
-        >
-          Most Saved
-        </button>
-        <button 
-          onClick={() => updateParams("sort", "trending")}
-          className={`shrink-0 transition-colors ${currentSort === "trending" ? "text-purple font-bold" : "hover:text-purple"}`}
-        >
-          Trending
-        </button>
+            <option value="all">All Categories</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-text">
+            <ChevronDown className="h-4 w-4" />
+          </div>
+        </div>
+
+        {/* Sort Dropdown */}
+        <div className="relative flex-1 sm:max-w-xs">
+          <select 
+            value={currentSort}
+            onChange={(e) => updateParams("sort", e.target.value)}
+            className="w-full appearance-none bg-white dark:bg-navy-deep text-navy-dark dark:text-white text-sm font-semibold rounded-xl border border-purple-light/50 py-2.5 pl-4 pr-10 shadow-sm focus:ring-2 focus:ring-purple focus:outline-none cursor-pointer"
+          >
+            <option value="newest">Sort by: Newest</option>
+            <option value="popular">Sort by: Popular</option>
+            <option value="saved">Sort by: Most Saved</option>
+            <option value="trending">Sort by: Trending</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-text">
+            <ChevronDown className="h-4 w-4" />
+          </div>
+        </div>
       </div>
     </div>
   );

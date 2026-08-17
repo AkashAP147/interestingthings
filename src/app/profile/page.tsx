@@ -1,18 +1,34 @@
-import { Flame, FolderHeart, Bookmark, Settings, User as UserIcon } from "lucide-react";
+import { Flame, FolderHeart, Bookmark, Settings, User as UserIcon, Shield } from "lucide-react";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
-import { getDailyDiscoveries } from "@/lib/data";
+import { readDB } from "@/lib/db";
 import { getCurrentUserAction } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { ProfileForm } from "@/components/ProfileForm";
+import { GalleryTab } from "@/components/GalleryTab";
+import { getUserPostsAction } from "@/app/actions";
 import Link from "next/link";
+import { Image as ImageIcon } from "lucide-react";
 
 export default async function ProfilePage(props: { searchParams: Promise<{ tab?: string }> }) {
   const searchParams = await props.searchParams;
   const user = await getCurrentUserAction();
   if (!user) redirect("/");
 
-  const savedDiscoveries = await getDailyDiscoveries();
-  const currentTab = searchParams?.tab || "saved";
+  const currentTab = searchParams?.tab || "gallery";
+  
+  let savedDiscoveries: any[] = [];
+  if (currentTab === "saved") {
+    const allData = await readDB();
+    savedDiscoveries = allData.filter(d => user.likes?.includes(d.id));
+  }
+  
+  let userPosts = [];
+  if (currentTab === "gallery") {
+    const postsRes = await getUserPostsAction(user.id, user.id);
+    if (postsRes.success) {
+      userPosts = postsRes.posts;
+    }
+  }
 
   const activityDates = user.activityDates || [];
   const streakCount = user.streakCount || 0;
@@ -82,6 +98,9 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
       {/* Main Content Tabs */}
       <div className="flex flex-col gap-8">
         <div className="flex items-center gap-8 border-b border-purple-light/50 pb-4 overflow-x-auto">
+          <Link href="?tab=gallery" className={`flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors ${currentTab === 'gallery' ? 'text-purple border-b-2 border-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+            <ImageIcon className="h-5 w-5" /> Gallery
+          </Link>
           <Link href="?tab=saved" className={`flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors ${currentTab === 'saved' ? 'text-purple border-b-2 border-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
             <Bookmark className="h-5 w-5" /> Saved Discoveries
           </Link>
@@ -91,17 +110,40 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
           <Link href="?tab=settings" className={`flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors ${currentTab === 'settings' ? 'text-purple border-b-2 border-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
             <Settings className="h-5 w-5" /> Settings
           </Link>
+          {user.role === "admin" && (
+            <Link href="/admin" className="flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors text-purple-bright hover:text-purple ml-auto border-l border-purple-light/50 pl-8">
+              <Shield className="h-5 w-5" /> Admin Panel
+            </Link>
+          )}
         </div>
 
         {currentTab === 'settings' ? (
           <div className="py-8">
             <ProfileForm />
           </div>
+        ) : currentTab === 'gallery' ? (
+          <div className="py-8">
+            <GalleryTab initialPosts={userPosts} />
+          </div>
+        ) : currentTab === 'collections' ? (
+          <div className="py-24 text-center text-gray-text">
+            <FolderHeart className="h-16 w-16 mx-auto mb-4 opacity-20" />
+            <h3 className="text-xl font-heading font-semibold text-navy-dark dark:text-white">Coming Soon!</h3>
+            <p className="mt-2 max-w-md mx-auto">We're working hard on bringing Custom Collections to TIMIT so you can organize your favorite discoveries.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {savedDiscoveries.map(discovery => (
-              <DiscoveryCard key={discovery.id} discovery={discovery} />
-            ))}
+            {savedDiscoveries.length === 0 ? (
+              <div className="col-span-full py-24 text-center text-gray-text">
+                <Bookmark className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                <h3 className="text-xl font-heading font-semibold text-navy-dark dark:text-white">No Saved Discoveries</h3>
+                <p className="mt-2 max-w-md mx-auto">You haven't saved any discoveries yet. Start exploring and bookmark your favorites!</p>
+              </div>
+            ) : (
+              savedDiscoveries.map(discovery => (
+                <DiscoveryCard key={discovery.id} discovery={discovery} />
+              ))
+            )}
           </div>
         )}
       </div>

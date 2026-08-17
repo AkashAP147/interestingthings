@@ -2,11 +2,12 @@
 
 import { updateDiscoveryStatus, deleteDiscovery } from "@/lib/db";
 import { findOrCreateUser, verifyUser, toggleLike, getUserByIdentifier, isUsernameTaken, updateUserProfile } from "@/lib/user-db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { cookies } from "next/headers";
 
 export async function approveDiscovery(id: string) {
   await updateDiscoveryStatus(id, "published");
+  updateTag("discoveries");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -15,6 +16,7 @@ export async function approveDiscovery(id: string) {
 
 export async function rejectDiscovery(id: string) {
   await deleteDiscovery(id);
+  updateTag("discoveries");
   revalidatePath("/admin");
   return { success: true };
 }
@@ -26,6 +28,7 @@ export async function getRandomDiscoveryAction() {
 
 export async function deleteDiscoveryAction(id: string) {
   await deleteDiscovery(id);
+  updateTag("discoveries");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -150,6 +153,7 @@ export async function manualAddDiscoveryAction(formData: FormData) {
     return { success: false, error: "This URL has already been added." };
   }
   
+  updateTag("discoveries");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -368,12 +372,12 @@ export async function startChatAction(targetUsername: string) {
   return { success: true, chatId };
 }
 
-export async function sendMessageAction(chatId: string, text: string) {
+export async function sendMessageAction(chatId: string, text?: string, imageUrl?: string, payload?: any) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
   if (!currentUserId) return { success: false, error: "Unauthorized" };
 
-  if (!text.trim()) return { success: false, error: "Empty message" };
+  if (!text?.trim() && !imageUrl && !payload) return { success: false, error: "Empty message" };
 
   const { database } = await import("@/lib/firebase");
   const chatRef = database.ref(`chats/${chatId}`);
@@ -388,18 +392,30 @@ export async function sendMessageAction(chatId: string, text: string) {
 
   const timestamp = new Date().toISOString();
 
-  // Add message
   await database.ref(`messages/${chatId}`).push({
     senderId: currentUserId,
-    text: text.trim(),
-    createdAt: timestamp
+    text: text?.trim() || null,
+    imageUrl: imageUrl || null,
+    payload: payload || null,
+    createdAt: timestamp,
+    status: "sent"
   });
 
   // Update last message preview
   await chatRef.update({
-    lastMessage: text.trim().substring(0, 50),
+    lastMessage: payload ? "🔒 Encrypted Message" : (imageUrl ? "📸 Image" : text?.trim().substring(0, 50) || ""),
+    lastMessagePayload: payload || null,
+    lastMessageSenderId: currentUserId,
     updatedAt: timestamp
   });
+
+  // Increment unread count for recipient
+  const participants = Object.keys(chatData.participants || {});
+  const recipientId = participants.find(id => id !== currentUserId);
+  if (recipientId) {
+    const currentUnread = chatData[`unreadCount_${recipientId}`] || 0;
+    await chatRef.child(`unreadCount_${recipientId}`).set(currentUnread + 1);
+  }
 
   return { success: true };
 }
@@ -431,9 +447,13 @@ export async function getChatsAction() {
           name: otherUser.name || otherUser.username || "Unknown User",
           username: otherUser.username || null,
           profilePicture: otherUser.profilePicture || null,
+          publicKey: (otherUser as any).publicKey || null,
         } : null,
         lastMessage: data.lastMessage,
-        updatedAt: data.updatedAt
+        lastMessagePayload: data.lastMessagePayload || null,
+        lastMessageSenderId: data.lastMessageSenderId || null,
+        updatedAt: data.updatedAt,
+        unreadCount: data[`unreadCount_${currentUserId}`] || 0
       });
     }
   }
@@ -459,6 +479,26 @@ export async function getMessagesAction(chatId: string) {
   
   const messagesSnap = await database.ref(`messages/${chatId}`).once('value');
   const messagesObj = messagesSnap.val() || {};
+  
+  // Mark incoming messages as read
+  let hasUpdates = false;
+  const updates: any = {};
+  
+  Object.keys(messagesObj).forEach(key => {
+    const msg = messagesObj[key];
+    if (msg.senderId !== currentUserId && msg.status !== "read") {
+      msg.status = "read";
+      updates[`${key}/status`] = "read";
+      hasUpdates = true;
+    }
+  });
+
+  if (hasUpdates) {
+    await database.ref(`messages/${chatId}`).update(updates);
+  }
+  
+  // Reset unread count for this chat for the current user
+  await database.ref(`chats/${chatId}/unreadCount_${currentUserId}`).set(0);
   
   const messages = Object.keys(messagesObj).map(key => ({
     id: key,
@@ -488,6 +528,7 @@ export async function deleteMessageAction(chatId: string, messageId: string, for
     }
     await msgRef.update({
       text: "This message was deleted",
+      imageUrl: null,
       isDeleted: true
     });
   } else {
@@ -508,5 +549,111 @@ export async function setPublicKeyAction(publicKey: string) {
 
   const { database } = await import("@/lib/firebase");
   await database.ref(`users/${currentUserId}/publicKey`).set(publicKey);
+  return { success: true };
+}
+
+export async function createPostAction(imageUrls: string[], caption: string, visibility: "public" | "private" | "friends" = "public") {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  if (!imageUrls || imageUrls.length === 0) return { success: false, error: "At least one image is required" };
+
+  const { database } = await import("@/lib/firebase");
+  
+  const newPost = {
+    userId: currentUserId,
+    imageUrls,
+    caption: caption.trim(),
+    visibility,
+    createdAt: new Date().toISOString(),
+    likes: 0
+  };
+
+  await database.ref(`posts/${currentUserId}`).push(newPost);
+  
+  revalidatePath("/profile");
+  return { success: true };
+}
+
+export async function getUserPostsAction(targetUserId: string, viewerId?: string) {
+  const { database } = await import("@/lib/firebase");
+  const { getUserById } = await import("@/lib/user-db");
+  
+  const postsSnap = await database.ref(`posts/${targetUserId}`).once('value');
+  const postsData = postsSnap.val() || {};
+  
+  // Fetch target user to check followers list
+  let isFriend = false;
+  if (viewerId && viewerId !== targetUserId) {
+    const targetUser = await getUserById(targetUserId);
+    if (targetUser && targetUser.followers) {
+      isFriend = targetUser.followers.includes(viewerId);
+    }
+  }
+
+  const posts = Object.keys(postsData).map(key => ({
+    id: key,
+    ...postsData[key]
+  })).filter((post: any) => {
+    if (targetUserId === viewerId) return true; // Owner sees all
+    if (post.visibility === "private") return false; // Hide private
+    if (post.visibility === "friends") return isFriend; // Check friend status
+    return true; // Public
+  }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  return { success: true, posts };
+}
+
+export async function searchUsersAction(query: string) {
+  if (!query || query.length < 2) return { success: true, users: [] };
+  
+  const { database } = await import("@/lib/firebase");
+  
+  const q = query.toLowerCase();
+  
+  // We'll fetch all users for now since RTDB doesn't have robust full-text search.
+  // In production with thousands of users, we should use Algolia or Typesense.
+  const usersSnap = await database.ref('users').once('value');
+  const usersData = usersSnap.val() || {};
+  
+  const matches = Object.keys(usersData).map(id => ({
+    id,
+    username: usersData[id].username || "",
+    name: usersData[id].name || "",
+    profilePicture: usersData[id].profilePicture || null,
+    verified: usersData[id].verified || false
+  })).filter(user => 
+    user.username.toLowerCase().includes(q) || 
+    user.name.toLowerCase().includes(q)
+  ).slice(0, 10); // Limit to 10 results
+  
+  return { success: true, users: matches };
+}
+
+export async function markChatsDeliveredAction(chatIds: string[]) {
+  if (!chatIds || chatIds.length === 0) return { success: true };
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false };
+
+  const { database } = await import("@/lib/firebase");
+  
+  // For each chat, fetch messages that are "sent" and from the other user, and mark as "delivered"
+  for (const chatId of chatIds) {
+    const snap = await database.ref(`messages/${chatId}`).orderByChild("status").equalTo("sent").once("value");
+    if (snap.exists()) {
+      const updates: any = {};
+      const msgs = snap.val();
+      Object.keys(msgs).forEach(key => {
+        if (msgs[key].senderId !== currentUserId) {
+          updates[`${chatId}/${key}/status`] = "delivered";
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        await database.ref(`messages`).update(updates);
+      }
+    }
+  }
   return { success: true };
 }

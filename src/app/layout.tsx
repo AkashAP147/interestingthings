@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/AuthModal";
 import { getCurrentUserAction } from "@/app/actions";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -31,14 +32,16 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className="scroll-smooth">
-      <body className={`${inter.variable} ${outfit.variable} antialiased min-h-screen flex flex-col bg-background text-foreground pt-[73px]`}>
+      <body className={`${inter.variable} ${outfit.variable} antialiased min-h-screen flex flex-col bg-background text-foreground pt-[73px] pb-20 lg:pb-0`}>
         <AuthProvider initialUser={initialUser}>
-          <Navbar />
-          <main className="flex-grow flex flex-col">
-            {children}
-          </main>
-          <Footer />
-          <AuthModal />
+          <NotificationProvider>
+            <Navbar />
+            <main className="flex-grow flex flex-col">
+              {children}
+            </main>
+            <Footer />
+            <AuthModal />
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>

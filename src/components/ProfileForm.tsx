@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { updateUserProfileAction } from "@/app/actions";
 
 export function ProfileForm() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -220,6 +220,16 @@ export function ProfileForm() {
           className="w-full sm:w-auto bg-purple text-white px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-bright transition-colors shadow-sm disabled:opacity-70"
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Changes"}
+        </button>
+      </div>
+
+      <div className="mt-8 pt-8 border-t border-purple-light/20 flex justify-end">
+        <button 
+          type="button" 
+          onClick={logout}
+          className="text-red-500 font-semibold text-sm hover:text-red-600 transition-colors"
+        >
+          Logout from account
         </button>
       </div>
 

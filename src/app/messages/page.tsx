@@ -2,15 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction } from "@/app/actions";
-import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash } from "lucide-react";
+import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction } from "@/app/actions";
+import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import EmojiPicker from 'emoji-picker-react';
+import { encryptPayload, decryptPayload } from "@/lib/e2ee";
 
 export default function MessagesPage() {
   const { user } = useAuth();
   const [chats, setChats] = useState<any[]>([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -19,9 +22,37 @@ export default function MessagesPage() {
   const [searchError, setSearchError] = useState("");
   const [messageToDelete, setMessageToDelete] = useState<any>(null);
   
+  // WhatsApp features state
+  const [pendingMessages, setPendingMessages] = useState<any[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [chatUsers, setChatUsers] = useState<Record<string, any>>({});
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const previousMessagesLength = useRef(0);
+  const previousPendingLength = useRef(0);
+
+  // Auto-scroll to bottom only when new messages arrive
+  useEffect(() => {
+    const isNewMessage = messages.length > previousMessagesLength.current;
+    const isNewPending = pendingMessages.length > previousPendingLength.current;
+    const isInitialLoad = messages.length > 0 && previousMessagesLength.current === 0;
+    
+    if (isNewMessage || isNewPending || isInitialLoad) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: "smooth"
+        });
+      }
+    }
+    
+    previousMessagesLength.current = messages.length;
+    previousPendingLength.current = pendingMessages.length;
+  }, [messages, pendingMessages]);
 
   // Fetch Chats Polling
   useEffect(() => {
@@ -31,10 +62,28 @@ export default function MessagesPage() {
       try {
         const res = await getChatsAction();
         if (res.success && res.chats) {
-          setChats(res.chats);
+          const privKey = localStorage.getItem(`privKey_${user.id}`);
+          const decryptedChats = await Promise.all(res.chats.map(async (chat: any) => {
+            if (chat.lastMessagePayload && privKey) {
+              const myKeyIndex = chat.lastMessageSenderId === user.id ? 0 : 1; 
+              const decrypted = await decryptPayload(chat.lastMessagePayload, privKey, myKeyIndex);
+              if (decrypted) {
+                chat.lastMessage = decrypted.imageUrl ? "📸 Image" : decrypted.text?.substring(0, 50) || "🔒 Encrypted Message";
+              }
+            }
+            return chat;
+          }));
+          setChats(decryptedChats);
+            
+            // Mark incoming messages as delivered
+            if (decryptedChats.length > 0) {
+              await markChatsDeliveredAction(decryptedChats.map(c => c.id));
+            }
         }
       } catch (e) {
         console.error("Failed to fetch chats");
+      } finally {
+        setIsLoadingChats(false);
       }
     };
 
@@ -45,13 +94,28 @@ export default function MessagesPage() {
 
   // Fetch Messages Polling
   useEffect(() => {
-    if (!activeChatId) return;
+    if (!activeChatId || !user) return;
     
     const fetchMessages = async () => {
       try {
         const res = await getMessagesAction(activeChatId);
         if (res.success && res.messages) {
-          setMessages(res.messages);
+          const privKey = localStorage.getItem(`privKey_${user.id}`);
+          
+          const decryptedMessages = await Promise.all(res.messages.map(async (msg: any) => {
+            if (msg.payload && privKey) {
+              const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
+              const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
+              if (decrypted) {
+                return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
+              } else {
+                return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
+              }
+            }
+            return msg;
+          }));
+          
+          setMessages(decryptedMessages);
         }
       } catch (e) {
         console.error("Failed to fetch messages");
@@ -85,14 +149,119 @@ export default function MessagesPage() {
     }
   };
 
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.7)); // Compress to 70% JPEG
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChatId) return;
+    
+    setIsUploading(true);
+    try {
+      const base64Image = await compressImage(file);
+      await sendOptimisticMessage("", base64Image);
+    } catch (err) {
+      console.error("Failed to process image");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !activeChatId) return;
     
     const text = newMessage;
-    setNewMessage(""); // Optimistic clear
+    setNewMessage(""); // Clear input instantly
+    setShowEmojiPicker(false);
     
-    await sendMessageAction(activeChatId, text);
+    await sendOptimisticMessage(text, null);
+  };
+
+  const sendOptimisticMessage = async (text: string, imageUrl: string | null) => {
+    if (!activeChatId || !user) return;
+    
+    const activeChatOtherUser = chats.find(c => c.id === activeChatId)?.otherUser;
+    const recipientPubKey = activeChatOtherUser?.publicKey;
+    const myPubKey = (user as any).publicKey || localStorage.getItem(`pubKey_${user.id}`);
+    
+    let finalPayload = undefined;
+    let finalPlainText = text;
+    let finalImageUrl = imageUrl;
+    
+    if (recipientPubKey && myPubKey) {
+      try {
+        finalPayload = await encryptPayload(text, imageUrl, [myPubKey, recipientPubKey]);
+        finalPlainText = "";
+        finalImageUrl = null;
+      } catch(err) {
+        console.error("Encryption failed", err);
+      }
+    }
+
+    const tempId = `temp-${Date.now()}`;
+    const pendingMsg = {
+      id: tempId,
+      senderId: user.id,
+      text: text, // Show plaintext instantly to sender
+      imageUrl: imageUrl, 
+      createdAt: new Date().toISOString(),
+      isPending: true
+    };
+    
+    setPendingMessages(prev => [...prev, pendingMsg]);
+    
+    try {
+      await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
+      
+      // Fetch fresh messages immediately after sending to trigger decrypt pipeline
+      const res = await getMessagesAction(activeChatId);
+      if (res.success && res.messages) {
+        const privKey = localStorage.getItem(`privKey_${user.id}`);
+        const decryptedMessages = await Promise.all(res.messages.map(async (msg: any) => {
+          if (msg.payload && privKey) {
+            const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
+            const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
+            if (decrypted) return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
+            return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
+          }
+          return msg;
+        }));
+        setMessages(decryptedMessages);
+      }
+    } catch(err) {
+      console.error("Failed to send message", err);
+    } finally {
+      setPendingMessages(prev => prev.filter(m => m.id !== tempId));
+    }
   };
 
   const handleDeleteMessage = async (forEveryone: boolean) => {
@@ -150,7 +319,11 @@ export default function MessagesPage() {
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {chats.length === 0 ? (
+          {isLoadingChats ? (
+            <div className="p-8 flex justify-center items-center h-full text-purple/50">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : chats.length === 0 ? (
             <div className="p-8 text-center text-gray-text flex flex-col items-center justify-center h-full">
               <MessageSquare className="h-12 w-12 mb-4 opacity-20" />
               <p>No messages yet.</p>
@@ -183,9 +356,16 @@ export default function MessagesPage() {
                         {chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-text truncate">
-                      {chat.lastMessage || "Started a chat"}
-                    </p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-gray-text truncate">
+                        {chat.lastMessage || "Started a chat"}
+                      </p>
+                      {chat.unreadCount > 0 && !isActive && (
+                        <span className="ml-2 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-green-500 px-1.5 text-xs font-bold text-white shadow-sm">
+                          {chat.unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -225,22 +405,26 @@ export default function MessagesPage() {
             </div>
             
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-              {messages.length === 0 ? (
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              {messages.length === 0 && pendingMessages.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-gray-text">
                   <p>Send a message to start the conversation!</p>
                 </div>
               ) : (
-                messages.map((msg, i) => {
+                [...messages, ...pendingMessages].map((msg, i, arr) => {
                   const isMine = msg.senderId === user.id;
-                  const showAvatar = i === 0 || messages[i-1].senderId !== msg.senderId;
+                  const showAvatar = i === 0 || arr[i-1].senderId !== msg.senderId;
                   
                   return (
                     <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-6' : 'mt-1'} group`}>
                       {!isMine && showAvatar && (
-                        <div className="h-8 w-8 rounded-full bg-gray-300 mr-2 shrink-0 self-end mb-1 flex items-center justify-center">
-                          <UserIcon className="h-4 w-4 text-gray-600" />
-                        </div>
+                        <Link href={`/profile/${activeChatOtherUser?.username || activeChatOtherUser?.id}`} className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-light to-blue mr-2 shrink-0 self-end mb-1 flex items-center justify-center relative overflow-hidden hover:ring-2 ring-purple transition-all shadow-sm">
+                          {activeChatOtherUser?.profilePicture ? (
+                            <Image src={activeChatOtherUser.profilePicture} alt="Profile" fill className="object-cover" sizes="32px" />
+                          ) : (
+                            <UserIcon className="h-4 w-4 text-white" />
+                          )}
+                        </Link>
                       )}
                       {!isMine && !showAvatar && <div className="w-10 shrink-0" />}
                       
@@ -251,38 +435,96 @@ export default function MessagesPage() {
                       </div>
 
                       <div className={`relative max-w-[75%] px-4 py-2 text-[15px] shadow-sm ${
-                        isMine 
-                          ? 'bg-gradient-to-br from-purple to-purple-bright text-white rounded-2xl rounded-tr-sm' 
-                          : 'bg-white dark:bg-navy-dark text-navy-dark dark:text-white border border-purple-light/20 rounded-2xl rounded-tl-sm'
-                      }`}>
-                        <p className={`break-words whitespace-pre-wrap ${msg.isDeleted ? 'italic text-white/70 dark:text-gray-400' : ''}`}>
-                          {msg.text}
-                        </p>
-                        <span className={`text-[10px] block mt-1 text-right ${isMine ? 'text-white/70' : 'text-gray-text'}`}>
+                        !isMine 
+                          ? 'bg-gradient-to-br from-purple to-purple-bright text-white rounded-2xl rounded-tl-sm' 
+                          : 'bg-white dark:bg-navy-dark text-navy-dark dark:text-white border border-purple-light/20 rounded-2xl rounded-tr-sm'
+                      } ${msg.isPending ? 'opacity-70' : ''}`}>
+                        {msg.imageUrl && !msg.isDeleted && (
+                          <div className="mb-2 relative w-full overflow-hidden rounded-xl bg-black/10">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={msg.imageUrl} alt="Shared image" className="max-w-full h-auto object-contain max-h-64" />
+                          </div>
+                        )}
+                        {msg.text && (
+                          <p className={`break-words whitespace-pre-wrap ${msg.isDeleted ? (!isMine ? 'italic text-white/70' : 'italic text-gray-400') : ''}`}>
+                            {msg.text}
+                          </p>
+                        )}
+                        <span className={`text-[10px] flex items-center justify-end gap-1 mt-1 ${!isMine ? 'text-white/70' : 'text-gray-500'}`}>
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {isMine && msg.isPending && <Clock className="w-3 h-3 text-gray-400" />}
+                          {isMine && !msg.isPending && msg.status === "sent" && <Check className="w-3.5 h-3.5 text-gray-400" />}
+                          {isMine && !msg.isPending && msg.status === "delivered" && <CheckCheck className="w-3.5 h-3.5 text-gray-400" />}
+                          {isMine && !msg.isPending && msg.status === "read" && <CheckCheck className="w-3.5 h-3.5 text-blue-500" />}
                         </span>
                       </div>
                     </div>
                   );
                 })
               )}
-              <div ref={messagesEndRef} />
             </div>
             
             {/* Input Area */}
-            <div className="p-4 bg-white dark:bg-navy-dark border-t border-purple-light/20 shrink-0">
-              <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="flex-1 bg-gray-50 dark:bg-navy-deep border border-purple-light/30 text-navy-dark dark:text-white rounded-full px-6 py-3 focus:outline-none focus:ring-2 focus:ring-purple-light transition-all"
-                />
+            <div className="p-4 bg-white dark:bg-navy-dark border-t border-purple-light/20 shrink-0 relative">
+              
+              {/* Emoji Picker Popover */}
+              <AnimatePresence>
+                {showEmojiPicker && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    className="absolute bottom-full left-4 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border border-purple-light/20"
+                  >
+                    <EmojiPicker 
+                      onEmojiClick={(emojiData) => setNewMessage(prev => prev + emojiData.emoji)}
+                      theme={'auto' as any}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto items-end">
+                <div className="flex-1 bg-gray-50 dark:bg-navy-deep border border-purple-light/30 rounded-3xl flex items-end px-2 py-1 focus-within:ring-2 focus-within:ring-purple-light transition-all">
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="p-2.5 text-gray-400 hover:text-purple transition-colors mb-0.5 shrink-0"
+                  >
+                    <Smile className="w-6 h-6" />
+                  </button>
+
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-1 bg-transparent text-navy-dark dark:text-white px-2 py-3 focus:outline-none min-w-0"
+                  />
+
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="p-2.5 text-gray-400 hover:text-purple transition-colors mb-0.5 shrink-0 disabled:opacity-50"
+                  >
+                    {isUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImageIcon className="w-6 h-6" />}
+                  </button>
+
+                </div>
+
                 <button
                   type="submit"
-                  disabled={!newMessage.trim()}
-                  className="bg-purple text-white rounded-full p-3 hover:bg-purple-bright transition-colors shadow-md disabled:opacity-50 disabled:hover:bg-purple flex items-center justify-center"
+                  disabled={!newMessage.trim() && !isUploading}
+                  className="bg-purple text-white rounded-full p-3.5 mb-1 hover:bg-purple-bright transition-colors shadow-md disabled:opacity-50 disabled:hover:bg-purple shrink-0 flex items-center justify-center"
                 >
                   <Send className="h-5 w-5 ml-0.5" />
                 </button>

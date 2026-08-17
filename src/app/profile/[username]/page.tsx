@@ -2,9 +2,11 @@ import { getUserByIdentifier } from "@/lib/user-db";
 import { getCurrentUserAction } from "@/app/actions";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import { User as UserIcon, Calendar, Activity, Star } from "lucide-react";
 import FollowButton from "@/components/profile/FollowButton";
 import Link from "next/link";
+import { getUserPostsAction } from "@/app/actions";
+import { User as UserIcon, Calendar, Activity, Star } from "lucide-react";
+import { GalleryTab } from "@/components/GalleryTab";
 
 export async function generateMetadata(props: { params: Promise<{ username: string }> }) {
   const params = await props.params;
@@ -34,6 +36,9 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
   const followerCount = targetUser.followers?.length || 0;
   const followingCount = targetUser.following?.length || 0;
   const joinDate = new Date(targetUser.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const postsRes = await getUserPostsAction(targetUser.id, currentUser?.id);
+  const posts = postsRes.success ? postsRes.posts : [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -125,8 +130,15 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
             </div>
           </div>
 
-          <div className="mt-12 text-center text-gray-text py-12 border-2 border-dashed border-purple-light/20 rounded-2xl">
-            <p className="text-lg">Recent activity is private.</p>
+          <div className="mt-12">
+            <h2 className="text-xl font-heading font-bold text-navy-dark dark:text-white mb-6">Gallery</h2>
+            {posts.length === 0 ? (
+              <div className="text-center text-gray-text py-12 border-2 border-dashed border-purple-light/20 rounded-2xl">
+                <p className="text-lg">No visible posts.</p>
+              </div>
+            ) : (
+              <GalleryTab initialPosts={posts} readOnly={true} />
+            )}
           </div>
         </div>
       </div>

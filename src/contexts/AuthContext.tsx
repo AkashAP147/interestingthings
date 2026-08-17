@@ -5,6 +5,8 @@ import { getCurrentUserAction, syncAuthTokenAction } from "@/app/actions";
 import { User } from "@/lib/user-db";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
+import { generateKeyPair, exportKey } from "@/lib/e2ee";
+import { setPublicKeyAction } from "@/app/actions";
 
 interface AuthContextType {
   user: User | null;
@@ -30,6 +32,22 @@ export function AuthProvider({ children, initialUser = null }: { children: React
     try {
       const u = await getCurrentUserAction();
       setUser(u);
+      
+      // E2EE Key Management
+      if (u) {
+        let privKey = localStorage.getItem(`privKey_${u.id}`);
+        if (!privKey) {
+          try {
+            const keypair = await generateKeyPair();
+            const privStr = await exportKey(keypair.privateKey);
+            const pubStr = await exportKey(keypair.publicKey);
+            localStorage.setItem(`privKey_${u.id}`, privStr);
+            await setPublicKeyAction(pubStr);
+          } catch(err) {
+            console.error("Failed to generate E2EE keys", err);
+          }
+        }
+      }
     } catch (e) {
       setUser(null);
     } finally {

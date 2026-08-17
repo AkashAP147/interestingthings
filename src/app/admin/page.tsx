@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { Plus, CheckCircle2, Bot } from "lucide-react";
+import { Plus, CheckCircle2, Bot, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { AdminMessages } from "@/components/AdminMessages";
 import { getPendingDiscoveries, readDB, getContactMessages } from "@/lib/db";
@@ -17,6 +17,9 @@ export default async function AdminPage() {
     <div className="px-6 lg:px-12 max-w-[1600px] mx-auto w-full py-12 flex flex-col gap-12">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 border-b border-purple-light/20 pb-8">
         <div>
+          <Link href="/profile" className="inline-flex items-center gap-2 text-purple hover:text-purple-bright font-semibold mb-2 transition-colors">
+            <ArrowLeft className="h-4 w-4" /> Back to Profile
+          </Link>
           <h1 className="font-heading text-4xl font-bold tracking-tight text-navy-dark dark:text-white">
             Admin Dashboard
           </h1>
