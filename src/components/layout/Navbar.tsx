@@ -86,6 +86,7 @@ export function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
+                prefetch={true}
                 className={cn(
                   "relative flex items-center text-sm font-semibold leading-6 transition-colors duration-200",
                   isActive
@@ -143,16 +144,16 @@ export function Navbar() {
           "fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-navy-deep/95 backdrop-blur-md border-t border-purple-light/20 flex justify-around items-center p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] lg:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.05)] dark:shadow-none transition-transform duration-300",
           scrollDirection === "down" && isScrolled ? "translate-y-[120%]" : "translate-y-0"
         )}>
-        <Link href="/discover" className={`flex flex-col items-center gap-1 p-2 ${pathname === '/discover' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+        <Link href="/discover" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/discover' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           <Compass className="h-6 w-6" />
           <span className="text-[10px] font-semibold">Discover</span>
         </Link>
-        <Link href="/search" className={`flex flex-col items-center gap-1 p-2 ${pathname === '/search' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+        <Link href="/search" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/search' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           <Search className="h-6 w-6" />
           <span className="text-[10px] font-semibold">Search</span>
         </Link>
         {user && (
-          <Link href="/messages" className={`flex flex-col items-center gap-1 p-2 ${pathname === '/messages' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+          <Link href="/messages" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/messages' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
             <div className="relative">
               <MessageSquare className="h-6 w-6" />
               {unreadCount > 0 && (
@@ -164,11 +165,11 @@ export function Navbar() {
             <span className="text-[10px] font-semibold">Messages</span>
           </Link>
         )}
-        <Link href="/about" className={`flex flex-col items-center gap-1 p-2 ${pathname === '/about' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+        <Link href="/about" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/about' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           <Info className="h-6 w-6" />
           <span className="text-[10px] font-semibold">About</span>
         </Link>
-        <Link href="/profile" className={`flex flex-col items-center gap-1 p-2 ${pathname.startsWith('/profile') ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+        <Link href="/profile" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname.startsWith('/profile') ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           {user.profilePicture ? (
             <div className={`h-6 w-6 rounded-full overflow-hidden ${pathname.startsWith('/profile') ? 'ring-2 ring-purple' : ''}`}>
               <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
