@@ -53,10 +53,10 @@ export async function syncAuthTokenAction(idToken: string | null) {
     
     const data = await res.json();
     const user = data.users[0];
-    const decoded = { uid: user.localId, email: user.email, name: user.displayName };
+    const decoded = { uid: user.localId, email: user.email, name: user.displayName, phoneNumber: user.phoneNumber };
     
     const { syncFirebaseUser } = await import("@/lib/user-db");
-    await syncFirebaseUser(decoded.uid, decoded.email || decoded.phone_number || "unknown", decoded.name);
+    await syncFirebaseUser(decoded.uid, decoded.email || decoded.phoneNumber || "unknown", decoded.name);
 
     cookieStore.set("auth_user", decoded.uid, {
       httpOnly: true,
