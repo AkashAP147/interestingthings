@@ -77,7 +77,10 @@ export function AuthModal() {
         
         // Manually sync the token right away to prevent race conditions before Step 2
         const { syncAuthTokenAction } = await import("@/app/actions");
-        await syncAuthTokenAction(token);
+        const syncRes = await syncAuthTokenAction(token);
+        if (!syncRes.success) {
+          throw new Error(syncRes.error || "Failed to sync authentication token.");
+        }
 
         setStep(2);
         setIsSubmitting(false);
@@ -88,7 +91,10 @@ export function AuthModal() {
         // Ensure the server cookie is set before reloading
         const token = await userCredential.user.getIdToken(true);
         const { syncAuthTokenAction } = await import("@/app/actions");
-        await syncAuthTokenAction(token);
+        const syncRes = await syncAuthTokenAction(token);
+        if (!syncRes.success) {
+          throw new Error(syncRes.error || "Failed to sync authentication token on the server.");
+        }
         
         window.location.reload();
       }
