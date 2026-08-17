@@ -200,6 +200,7 @@ export async function updateUserProfileAction(formData: FormData) {
   const contact = formData.get("contact") as string || "";
   const phone = formData.get("phone") as string || "";
   const profilePicture = formData.get("profilePicture") as string || "";
+  const bio = formData.get("bio") as string || "";
 
   if (username) {
     const taken = await isUsernameTaken(username, userId);
@@ -221,6 +222,7 @@ export async function updateUserProfileAction(formData: FormData) {
     contact,
     phone,
     profilePicture,
+    bio,
   };
 
   const user = await updateUserProfile(userId, updates);
@@ -430,8 +432,7 @@ export async function getChatsAction() {
   const userChatsSnap = await database.ref(`userChats/${currentUserId}`).once('value');
   const userChats = userChatsSnap.val() || {};
   
-  const chats = [];
-  for (const chatId of Object.keys(userChats)) {
+  const chatPromises = Object.keys(userChats).map(async (chatId) => {
     const chatSnap = await database.ref(`chats/${chatId}`).once('value');
     if (chatSnap.exists()) {
       const data = chatSnap.val();
@@ -439,7 +440,7 @@ export async function getChatsAction() {
       const otherUserId = participants.find(id => id !== currentUserId) || currentUserId;
       const otherUser = await getUserById(otherUserId);
       
-      chats.push({
+      return {
         id: chatId,
         participants,
         otherUser: otherUser ? {
@@ -454,9 +455,13 @@ export async function getChatsAction() {
         lastMessageSenderId: data.lastMessageSenderId || null,
         updatedAt: data.updatedAt,
         unreadCount: data[`unreadCount_${currentUserId}`] || 0
-      });
+      };
     }
-  }
+    return null;
+  });
+  
+  const resolvedChats = await Promise.all(chatPromises);
+  const chats = resolvedChats.filter(Boolean);
   
   chats.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return { success: true, chats };

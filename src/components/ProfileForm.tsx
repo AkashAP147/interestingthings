@@ -205,6 +205,20 @@ export function ProfileForm() {
         </div>
       </div>
 
+      {/* Bio */}
+      <div>
+        <label className="block text-sm font-semibold text-navy-dark dark:text-white mb-2">
+          Bio
+        </label>
+        <textarea 
+          name="bio"
+          defaultValue={user.bio || ""}
+          placeholder="Tell everyone a bit about yourself..."
+          rows={3}
+          className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-navy-dark border-0 ring-1 ring-inset ring-purple-light/30 focus:ring-2 focus:ring-purple text-navy-dark dark:text-white resize-none"
+        />
+      </div>
+
       <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex-1">
           {error && <p className="text-pink text-sm font-medium">{error}</p>}

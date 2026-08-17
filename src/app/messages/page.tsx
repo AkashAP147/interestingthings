@@ -12,8 +12,21 @@ import { encryptPayload, decryptPayload } from "@/lib/e2ee";
 
 export default function MessagesPage() {
   const { user } = useAuth();
-  const [chats, setChats] = useState<any[]>([]);
-  const [isLoadingChats, setIsLoadingChats] = useState(true);
+  const [chats, setChats] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('timit_chats');
+      if (cached) {
+        try { return JSON.parse(cached); } catch(e) {}
+      }
+    }
+    return [];
+  });
+  const [isLoadingChats, setIsLoadingChats] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !sessionStorage.getItem('timit_chats');
+    }
+    return true;
+  });
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -74,6 +87,9 @@ export default function MessagesPage() {
             return chat;
           }));
           setChats(decryptedChats);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('timit_chats', JSON.stringify(decryptedChats));
+          }
             
             // Mark incoming messages as delivered
             if (decryptedChats.length > 0) {
@@ -96,6 +112,15 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!activeChatId || !user) return;
     
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem(`timit_msgs_${activeChatId}`);
+      if (cached) {
+        try { setMessages(JSON.parse(cached)); } catch(e) {}
+      } else {
+        setMessages([]);
+      }
+    }
+    
     const fetchMessages = async () => {
       try {
         const res = await getMessagesAction(activeChatId);
@@ -116,6 +141,9 @@ export default function MessagesPage() {
           }));
           
           setMessages(decryptedMessages);
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(`timit_msgs_${activeChatId}`, JSON.stringify(decryptedMessages));
+          }
         }
       } catch (e) {
         console.error("Failed to fetch messages");
@@ -289,7 +317,7 @@ export default function MessagesPage() {
   return (
     <>
       {/* Sidebar */}
-      <div className="w-full md:w-80 lg:w-96 border-r border-purple-light/20 flex flex-col bg-white dark:bg-navy-dark h-full">
+      <div className={`w-full md:w-80 lg:w-96 border-r border-purple-light/20 flex-col bg-white dark:bg-navy-dark h-full ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
         {/* Header / New Chat */}
         <div className="p-4 border-b border-purple-light/20">
           <h2 className="font-heading font-bold text-2xl text-navy-dark dark:text-white mb-4">Messages</h2>
@@ -375,7 +403,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className={`flex-1 flex flex-col bg-gray-50/50 dark:bg-navy-deep ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex-col bg-gray-50/50 dark:bg-navy-deep ${!activeChatId ? 'hidden md:flex' : 'flex fixed inset-0 z-[100] md:static md:z-auto'}`}>
         {!activeChatId ? (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-text p-8 text-center">
             <MessageSquare className="h-16 w-16 mb-6 opacity-20" />
@@ -385,23 +413,30 @@ export default function MessagesPage() {
         ) : (
           <>
             {/* Active Chat Header */}
-            <div className="h-16 border-b border-purple-light/20 flex items-center px-6 bg-white dark:bg-navy-dark shrink-0 shadow-sm z-10">
-              <button onClick={() => setActiveChatId(null)} className="md:hidden mr-4 text-purple">
-                &larr; Back
+            <div className="h-[60px] border-b border-purple-light/20 flex items-center justify-between px-2 sm:px-6 bg-white dark:bg-navy-dark shrink-0 shadow-sm z-10">
+              <div className="flex items-center">
+                <button onClick={() => setActiveChatId(null)} className="md:hidden mr-1 p-2 text-navy-dark dark:text-white hover:bg-gray-100 dark:hover:bg-navy-deep rounded-full transition-colors">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                </button>
+                <Link href={`/profile/${activeChatOtherUser?.username || activeChatOtherUser?.id}`} className="flex items-center group cursor-pointer">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-light to-blue flex items-center justify-center text-white mr-3 relative overflow-hidden">
+                    {activeChatOtherUser?.profilePicture ? (
+                      <Image src={activeChatOtherUser.profilePicture} alt="Profile" fill className="object-cover" sizes="40px" />
+                    ) : (
+                      <UserIcon className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[16px] text-navy-dark dark:text-white flex items-center gap-2">
+                      {activeChatOtherUser?.name || 'Chat'}
+                    </h3>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-[-2px]">last seen recently</p>
+                  </div>
+                </Link>
+              </div>
+              <button className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-navy-deep rounded-full transition-colors">
+                <MoreHorizontal className="w-6 h-6" />
               </button>
-              <Link href={`/profile/${activeChatOtherUser?.username || activeChatOtherUser?.id}`} className="flex items-center group cursor-pointer">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-light to-blue flex items-center justify-center text-white mr-3 relative overflow-hidden group-hover:ring-2 ring-purple transition-all">
-                  {activeChatOtherUser?.profilePicture ? (
-                    <Image src={activeChatOtherUser.profilePicture} alt="Profile" fill className="object-cover" sizes="40px" />
-                  ) : (
-                    <UserIcon className="h-5 w-5" />
-                  )}
-                </div>
-                <h3 className="font-bold text-navy-dark dark:text-white group-hover:text-purple transition-colors flex items-center gap-2">
-                  {activeChatOtherUser?.name || 'Chat'}
-                  <ExternalLink className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </h3>
-              </Link>
             </div>
             
             {/* Messages Scroll Area */}
@@ -465,7 +500,7 @@ export default function MessagesPage() {
             </div>
             
             {/* Input Area */}
-            <div className="p-4 bg-white dark:bg-navy-dark border-t border-purple-light/20 shrink-0 relative">
+            <div className="p-2 md:p-4 bg-white dark:bg-navy-dark border-t border-purple-light/20 shrink-0 relative">
               
               {/* Emoji Picker Popover */}
               <AnimatePresence>
@@ -485,12 +520,12 @@ export default function MessagesPage() {
               </AnimatePresence>
 
               <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto items-end">
-                <div className="flex-1 bg-gray-50 dark:bg-navy-deep border border-purple-light/30 rounded-3xl flex items-end px-2 py-1 focus-within:ring-2 focus-within:ring-purple-light transition-all">
+                <div className="flex-1 bg-gray-50 dark:bg-navy-deep border border-purple-light/30 rounded-3xl flex items-center px-2 py-1 focus-within:ring-2 focus-within:ring-purple-light transition-all">
                   
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className="p-2.5 text-gray-400 hover:text-purple transition-colors mb-0.5 shrink-0"
+                    className="p-2.5 text-gray-400 hover:text-purple transition-colors shrink-0"
                   >
                     <Smile className="w-6 h-6" />
                   </button>
@@ -500,7 +535,7 @@ export default function MessagesPage() {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder="Type a message..."
-                    className="flex-1 bg-transparent text-navy-dark dark:text-white px-2 py-3 focus:outline-none min-w-0"
+                    className="flex-1 bg-transparent text-navy-dark dark:text-white px-2 py-2 text-[16px] focus:outline-none min-w-0 placeholder-gray-400"
                   />
 
                   <input 
@@ -514,7 +549,7 @@ export default function MessagesPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="p-2.5 text-gray-400 hover:text-purple transition-colors mb-0.5 shrink-0 disabled:opacity-50"
+                    className="p-2.5 text-gray-400 hover:text-purple transition-colors shrink-0 disabled:opacity-50"
                   >
                     {isUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImageIcon className="w-6 h-6" />}
                   </button>
@@ -524,7 +559,7 @@ export default function MessagesPage() {
                 <button
                   type="submit"
                   disabled={!newMessage.trim() && !isUploading}
-                  className="bg-purple text-white rounded-full p-3.5 mb-1 hover:bg-purple-bright transition-colors shadow-md disabled:opacity-50 disabled:hover:bg-purple shrink-0 flex items-center justify-center"
+                  className="bg-purple text-white rounded-full p-3.5 hover:bg-purple-bright transition-colors shadow-md disabled:opacity-50 shrink-0 flex items-center justify-center mb-0.5"
                 >
                   <Send className="h-5 w-5 ml-0.5" />
                 </button>

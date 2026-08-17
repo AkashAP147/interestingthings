@@ -66,6 +66,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           let currentUnreadCount = 0;
 
           for (const chat of res.chats) {
+            if (!chat) continue;
             const chatTime = new Date(chat.updatedAt).getTime();
             
             if (chat.lastMessageSenderId !== user.id && chatTime > latestMessagesTime) {

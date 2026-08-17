@@ -1,8 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { Globe, MessageCircle, Code2, Mail } from "lucide-react";
 import { CopyEmailButton } from "@/components/CopyEmailButton";
+import { usePathname } from "next/navigation";
 
 export function Footer() {
+  const pathname = usePathname();
+  if (pathname?.startsWith("/messages")) {
+    return null;
+  }
+
   return (
     <footer className="bg-white dark:bg-navy-dark border-t border-purple-light/20 mt-auto">
       <div className="mx-auto max-w-[1600px] px-6 pb-8 pt-16 sm:pt-24 lg:px-8 lg:pt-32">

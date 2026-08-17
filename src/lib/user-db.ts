@@ -18,6 +18,7 @@ export interface User {
   activityDates?: string[];
   streakCount?: number;
   curiosityPoints?: number;
+  bio?: string;
 }
 
 const COLLECTION = 'users';

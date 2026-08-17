@@ -106,6 +106,12 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
             {targetUser.username && (
               <p className="text-purple font-medium text-lg">@{targetUser.username}</p>
             )}
+
+            {targetUser.bio && (
+              <p className="text-sm text-navy-dark/80 dark:text-white/80 mt-4 max-w-lg leading-relaxed">
+                {targetUser.bio}
+              </p>
+            )}
             
             <div className="flex flex-wrap items-center gap-6 mt-4 text-gray-text text-sm">
               <div className="flex items-center gap-1.5">

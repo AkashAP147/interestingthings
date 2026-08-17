@@ -3,16 +3,29 @@ import { database } from './firebase';
 
 const COLLECTION = 'discoveries';
 
+let cachedDiscoveries: Discovery[] | null = null;
+let lastCacheTime = 0;
+const CACHE_DURATION = 1000 * 60 * 5; // 5 minutes
+
 export async function readDB(): Promise<Discovery[]> {
+  const now = Date.now();
+  if (cachedDiscoveries && (now - lastCacheTime < CACHE_DURATION)) {
+    return cachedDiscoveries;
+  }
+
   try {
     const snapshot = await database.ref('discoveries').once('value');
     const data = snapshot.val() || {};
     const discoveries = Object.keys(data).map(key => data[key] as Discovery);
     // Sort by createdAt descending
-    return discoveries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const sorted = discoveries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    cachedDiscoveries = sorted;
+    lastCacheTime = now;
+    return sorted;
   } catch (error) {
     console.error("Failed to read DB:", error);
-    return [];
+    return cachedDiscoveries || [];
   }
 }
 

@@ -3,7 +3,7 @@ import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { readDB } from "@/lib/db";
 import { getCurrentUserAction } from "@/app/actions";
 import { redirect } from "next/navigation";
-import { ProfileForm } from "@/components/ProfileForm";
+import { EditProfileModal } from "@/components/EditProfileModal";
 import { GalleryTab } from "@/components/GalleryTab";
 import { getUserPostsAction } from "@/app/actions";
 import Link from "next/link";
@@ -55,13 +55,7 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
       {/* Profile Header & Streak */}
       <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 bg-white dark:bg-navy-deep p-8 rounded-3xl shadow-sm border border-purple-light/20">
         <div className="flex items-center gap-6">
-          <div className="h-24 w-24 shrink-0 rounded-full bg-gradient-to-br from-purple to-pink flex items-center justify-center overflow-hidden text-white font-heading text-3xl font-bold shadow-md">
-            {user.profilePicture ? (
-              <img src={user.profilePicture} alt={user.name || "User"} className="w-full h-full object-cover" />
-            ) : (
-              <UserIcon className="h-10 w-10" />
-            )}
-          </div>
+          <EditProfileModal user={user} />
           <div>
             <h1 className="font-heading text-3xl font-bold tracking-tight text-navy-dark dark:text-white">
               {user.name || "Curious Explorer"}
@@ -72,6 +66,11 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
                 {user.curiosityPoints || 0} Curiosity Points
               </span>
             </div>
+            {user.bio && (
+              <p className="text-sm text-navy-dark/80 dark:text-white/80 mt-4 max-w-md leading-relaxed">
+                {user.bio}
+              </p>
+            )}
           </div>
         </div>
 
@@ -107,9 +106,7 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
           <Link href="?tab=collections" className={`flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors ${currentTab === 'collections' ? 'text-purple border-b-2 border-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
             <FolderHeart className="h-5 w-5" /> My Collections
           </Link>
-          <Link href="?tab=settings" className={`flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors ${currentTab === 'settings' ? 'text-purple border-b-2 border-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
-            <Settings className="h-5 w-5" /> Settings
-          </Link>
+
           {user.role === "admin" && (
             <Link href="/admin" className="flex items-center gap-2 font-semibold whitespace-nowrap pb-4 -mb-4 transition-colors text-purple-bright hover:text-purple ml-auto border-l border-purple-light/50 pl-8">
               <Shield className="h-5 w-5" /> Admin Panel
@@ -117,11 +114,7 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
           )}
         </div>
 
-        {currentTab === 'settings' ? (
-          <div className="py-8">
-            <ProfileForm />
-          </div>
-        ) : currentTab === 'gallery' ? (
+        {currentTab === 'gallery' ? (
           <div className="py-8">
             <GalleryTab initialPosts={userPosts} />
           </div>
