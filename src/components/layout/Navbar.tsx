@@ -105,14 +105,14 @@ export function Navbar() {
         </div>
 
         {/* Subscribe/User Profile (Right) */}
-        <div className="hidden lg:flex lg:flex-1 lg:justify-end items-center gap-4">
+        <div className="flex flex-1 justify-end items-center gap-4">
           {!user ? (
             <div className="flex items-center gap-3">
-              <button onClick={() => openModal("login")} className="hidden md:inline-flex bg-blue text-white px-5 py-2.5 text-sm rounded-full font-semibold hover:opacity-90 hover:shadow-md transition-all">Log In</button>
-              <button onClick={() => openModal("signup")} className="hidden md:inline-flex bg-purple text-white px-5 py-2.5 text-sm rounded-full font-semibold hover:bg-purple-bright hover:shadow-md transition-all">Sign Up</button>
+              <button onClick={() => openModal("login")} className="text-sm font-semibold text-navy-dark dark:text-white hover:text-purple transition-colors">Log In</button>
+              <button onClick={() => openModal("signup")} className="bg-purple text-white px-4 py-2 text-sm rounded-full font-semibold hover:bg-purple-bright hover:shadow-md transition-all">Sign Up</button>
             </div>
           ) : (
-            <div className="flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-4">
               <Link href="/profile" className="flex items-center gap-2 group">
                 <div className="h-8 w-8 rounded-full overflow-hidden bg-purple-light/20 border-2 border-transparent group-hover:border-purple transition-colors flex items-center justify-center">
                   {user.profilePicture ? (
@@ -138,10 +138,11 @@ export function Navbar() {
     </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-navy-deep/95 backdrop-blur-md border-t border-purple-light/20 flex justify-around items-center p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] lg:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.05)] dark:shadow-none transition-transform duration-300",
-        scrollDirection === "down" && isScrolled ? "translate-y-[120%]" : "translate-y-0"
-      )}>
+      {user && (
+        <div className={cn(
+          "fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-navy-deep/95 backdrop-blur-md border-t border-purple-light/20 flex justify-around items-center p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] lg:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.05)] dark:shadow-none transition-transform duration-300",
+          scrollDirection === "down" && isScrolled ? "translate-y-[120%]" : "translate-y-0"
+        )}>
         <Link href="/discover" className={`flex flex-col items-center gap-1 p-2 ${pathname === '/discover' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           <Compass className="h-6 w-6" />
           <span className="text-[10px] font-semibold">Discover</span>
@@ -167,24 +168,18 @@ export function Navbar() {
           <Info className="h-6 w-6" />
           <span className="text-[10px] font-semibold">About</span>
         </Link>
-        {!user ? (
-          <button onClick={() => openModal("login")} className="flex flex-col items-center gap-1 p-2 text-gray-text hover:text-navy-dark dark:hover:text-white">
+        <Link href="/profile" className={`flex flex-col items-center gap-1 p-2 ${pathname.startsWith('/profile') ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+          {user.profilePicture ? (
+            <div className={`h-6 w-6 rounded-full overflow-hidden ${pathname.startsWith('/profile') ? 'ring-2 ring-purple' : ''}`}>
+              <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+            </div>
+          ) : (
             <UserIcon className="h-6 w-6" />
-            <span className="text-[10px] font-semibold">Log In</span>
-          </button>
-        ) : (
-          <Link href="/profile" className={`flex flex-col items-center gap-1 p-2 ${pathname.startsWith('/profile') ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
-            {user.profilePicture ? (
-               <div className={`h-6 w-6 rounded-full overflow-hidden ${pathname.startsWith('/profile') ? 'ring-2 ring-purple' : ''}`}>
-                 <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
-               </div>
-            ) : (
-              <UserIcon className="h-6 w-6" />
-            )}
-            <span className="text-[10px] font-semibold">Profile</span>
-          </Link>
-        )}
+          )}
+          <span className="text-[10px] font-semibold">Profile</span>
+        </Link>
       </div>
+      )}
     </>
   );
 }

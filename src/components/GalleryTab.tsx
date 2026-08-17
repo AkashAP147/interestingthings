@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { createPostAction } from "@/app/actions";
+import { createPostAction, updatePostVisibilityAction } from "@/app/actions";
 import { Plus, Image as ImageIcon, Loader2, X, User as UserIcon } from "lucide-react";
 
 interface Post {
@@ -78,7 +78,12 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
     if (previewImages.length === 0) return;
     setIsUploading(true);
     try {
-      const res = await createPostAction(previewImages, caption, visibility);
+      const formData = new FormData();
+      formData.append("imageUrls", JSON.stringify(previewImages));
+      formData.append("caption", caption);
+      formData.append("visibility", visibility);
+      
+      const res = await createPostAction(formData);
       if (res.success) {
         // Optimistically add to the front
         const newPost: Post = {
@@ -99,6 +104,18 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
       console.error("Failed to post", err);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleUpdateVisibility = async (postId: string, newVisibility: "public" | "private" | "friends") => {
+    try {
+      setPosts(posts.map(p => p.id === postId ? { ...p, visibility: newVisibility } : p));
+      if (viewingPost && viewingPost.id === postId) {
+        setViewingPost({ ...viewingPost, visibility: newVisibility });
+      }
+      await updatePostVisibilityAction(postId, newVisibility);
+    } catch (err) {
+      console.error("Failed to update visibility", err);
     }
   };
 
@@ -192,7 +209,7 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
             </div>
             
             <div className="p-4 flex flex-col gap-4 overflow-y-auto">
-              <div className="aspect-square w-full rounded-2xl overflow-hidden bg-black relative shrink-0">
+              <div className="h-48 w-full rounded-2xl overflow-hidden bg-black relative shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={previewImages[currentSlideIndex]} alt="Preview" className="w-full h-full object-contain" />
                 
@@ -310,6 +327,21 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
                     <p className="text-xs text-gray-text">{new Date(viewingPost.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>
+                
+                {!readOnly && (
+                  <div className="mb-4">
+                    <label className="text-xs font-semibold text-gray-text block mb-1">Visibility</label>
+                    <select 
+                      value={viewingPost.visibility}
+                      onChange={(e) => handleUpdateVisibility(viewingPost.id, e.target.value as any)}
+                      className="w-full bg-gray-50 dark:bg-navy-dark border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm text-navy-dark dark:text-white focus:outline-none"
+                    >
+                      <option value="public">Public (Everyone)</option>
+                      <option value="friends">Friends (Followers)</option>
+                      <option value="private">Private (Only Me)</option>
+                    </select>
+                  </div>
+                )}
                 
                 {viewingPost.caption ? (
                   <p className="text-navy-dark dark:text-gray-300 leading-relaxed whitespace-pre-wrap">

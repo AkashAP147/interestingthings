@@ -552,10 +552,15 @@ export async function setPublicKeyAction(publicKey: string) {
   return { success: true };
 }
 
-export async function createPostAction(imageUrls: string[], caption: string, visibility: "public" | "private" | "friends" = "public") {
+export async function createPostAction(formData: FormData) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
   if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const imageUrlsRaw = formData.get("imageUrls") as string;
+  const imageUrls = imageUrlsRaw ? JSON.parse(imageUrlsRaw) : [];
+  const caption = (formData.get("caption") as string) || "";
+  const visibility = (formData.get("visibility") as "public" | "private" | "friends") || "public";
 
   if (!imageUrls || imageUrls.length === 0) return { success: false, error: "At least one image is required" };
 
@@ -571,6 +576,18 @@ export async function createPostAction(imageUrls: string[], caption: string, vis
   };
 
   await database.ref(`posts/${currentUserId}`).push(newPost);
+  
+  revalidatePath("/profile");
+  return { success: true };
+}
+
+export async function updatePostVisibilityAction(postId: string, visibility: "public" | "private" | "friends") {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  await database.ref(`posts/${currentUserId}/${postId}`).update({ visibility });
   
   revalidatePath("/profile");
   return { success: true };
