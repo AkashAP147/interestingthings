@@ -55,9 +55,9 @@ export async function syncAuthTokenAction(idToken: string | null) {
       path: "/",
     });
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Token verification failed", error);
-    return { success: false, error: "Authentication failed" };
+    return { success: false, error: `Authentication failed: ${error.message || 'Unknown server error'}` };
   }
 }
 
