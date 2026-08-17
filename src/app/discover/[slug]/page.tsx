@@ -17,12 +17,20 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
   
   return {
-    title: `${discovery.title} | The Internet's Most Interesting Things`,
+    title: `${discovery.title}`,
     description: discovery.description,
+    keywords: [...discovery.tags, "interesting thing", discovery.title],
     openGraph: {
+      type: "article",
       title: discovery.title,
       description: discovery.description,
-      images: [{ url: discovery.imageUrl }],
+      images: [{ url: discovery.imageUrl, width: 1200, height: 630, alt: discovery.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: discovery.title,
+      description: discovery.description,
+      images: [discovery.imageUrl],
     },
   };
 }

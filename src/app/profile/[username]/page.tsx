@@ -18,6 +18,18 @@ export async function generateMetadata(props: { params: Promise<{ username: stri
   return {
     title: `${displayName} (@${targetUser.username}) - TIMIT`,
     description: `Check out ${displayName}'s profile on The Internet's Most Interesting Things.`,
+    openGraph: {
+      type: "profile",
+      title: `${displayName} (@${targetUser.username})`,
+      description: `Check out ${displayName}'s profile on The Internet's Most Interesting Things.`,
+      images: targetUser.profilePicture ? [{ url: targetUser.profilePicture, alt: displayName }] : [],
+    },
+    twitter: {
+      card: "summary",
+      title: `${displayName} (@${targetUser.username})`,
+      description: `Check out ${displayName}'s profile on The Internet's Most Interesting Things.`,
+      images: targetUser.profilePicture ? [targetUser.profilePicture] : [],
+    },
   };
 }
 

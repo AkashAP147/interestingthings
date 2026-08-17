@@ -19,8 +19,40 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "The Internet's Most Interesting Things",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://interestingthings.app"),
+  title: {
+    default: "The Internet's Most Interesting Things",
+    template: "%s | The Internet's Most Interesting Things",
+  },
   description: "Discover the weirdest websites, strangest products, fascinating datasets, crazy inventions and beautiful corners of the internet.",
+  keywords: ["interesting websites", "cool tools", "curated web", "weird products", "internet rabbit holes", "fascinating datasets"],
+  authors: [{ name: "TIMIT Curators" }],
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    title: "The Internet's Most Interesting Things",
+    description: "Discover the weirdest websites, strangest products, fascinating datasets, crazy inventions and beautiful corners of the internet.",
+    siteName: "TIMIT",
+    images: [
+      {
+        url: "/og-image.jpg", // We'll assume a fallback image exists, or it can be added later
+        width: 1200,
+        height: 630,
+        alt: "The Internet's Most Interesting Things",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "The Internet's Most Interesting Things",
+    description: "Discover the weirdest websites, strangest products, fascinating datasets, crazy inventions and beautiful corners of the internet.",
+    creator: "@TIMIT",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default async function RootLayout({

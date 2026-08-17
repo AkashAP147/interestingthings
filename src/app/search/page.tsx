@@ -4,6 +4,12 @@ import { TrendingUp, Users, Search as SearchIcon } from "lucide-react";
 import { getCurrentUserAction } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { UserSearchClient } from "@/components/UserSearchClient";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Search & Trending",
+  description: "Search for users, discover interesting things, and see what's trending across the community.",
+};
 
 export default async function SearchPage() {
   const user = await getCurrentUserAction();

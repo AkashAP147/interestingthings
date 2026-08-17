@@ -7,6 +7,12 @@ import { categories } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Discover",
+  description: "Browse the internet's most interesting things by category, popularity, or what's trending.",
+};
 
 export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; category?: string; sort?: string }> }) {
   const user = await getCurrentUserAction();
