@@ -1,9 +1,104 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X } from "lucide-react";
+import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X, Lock, Key } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { updateUserProfileAction } from "@/app/actions";
+import { updateUserProfileAction, backupPrivateKeyAction } from "@/app/actions";
+import { encryptPrivateKeyWithPassword, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
+
+function E2EEManager({ user }: { user: any }) {
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const hasLocalKey = typeof window !== 'undefined' ? !!localStorage.getItem(`privKey_${user.id}`) : false;
+  const hasServerBackup = !!user.encryptedPrivateKey;
+
+  const handleBackup = async () => {
+    if (!password) return;
+    setStatus("loading");
+    try {
+      const privKey = localStorage.getItem(`privKey_${user.id}`);
+      if (!privKey) throw new Error("No local key to backup");
+      
+      const payload = await encryptPrivateKeyWithPassword(privKey, password);
+      const res = await backupPrivateKeyAction(JSON.stringify(payload));
+      
+      if (res.success) {
+        setStatus("success");
+        setMsg("Key securely backed up to the server.");
+        window.location.reload();
+      } else {
+        throw new Error("Failed to save to server");
+      }
+    } catch (e: any) {
+      setStatus("error");
+      setMsg(e.message || "An error occurred");
+    }
+  };
+
+  const handleRecover = async () => {
+    if (!password) return;
+    setStatus("loading");
+    try {
+      const payload = JSON.parse(user.encryptedPrivateKey);
+      const decrypted = await decryptPrivateKeyWithPassword(payload, password);
+      if (decrypted) {
+        localStorage.setItem(`privKey_${user.id}`, decrypted);
+        setStatus("success");
+        setMsg("Key successfully recovered! You can now read messages.");
+        window.location.reload();
+      } else {
+        throw new Error("Incorrect password or corrupted key");
+      }
+    } catch (e: any) {
+      setStatus("error");
+      setMsg(e.message || "Recovery failed");
+    }
+  };
+
+  if (hasLocalKey && hasServerBackup) {
+    return (
+      <div className="bg-green/10 text-green p-4 rounded-xl flex items-center gap-3 mt-8">
+        <Lock className="w-5 h-5" />
+        <span className="text-sm font-semibold">Your encryption key is securely backed up.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-purple-light/10 p-4 sm:p-6 rounded-2xl border border-purple-light/30 flex flex-col gap-4 mt-8">
+      <div className="flex items-center gap-2 text-navy-dark dark:text-white font-bold text-lg">
+        <Key className="w-5 h-5 text-purple" />
+        Encryption Key Management
+      </div>
+      <p className="text-sm text-gray-text">
+        {!hasLocalKey && hasServerBackup 
+          ? "You are on a new device. Enter your Master Password to unlock your encrypted messages." 
+          : "Set a Master Password to back up your encryption key. This lets you read your messages on other devices."}
+      </p>
+      
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input 
+          type="password" 
+          placeholder="Master Password" 
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="flex-1 px-4 py-2 rounded-xl bg-white dark:bg-navy-deep border border-purple-light/30 focus:ring-2 focus:ring-purple text-navy-dark dark:text-white"
+        />
+        <button 
+          type="button"
+          onClick={!hasLocalKey && hasServerBackup ? handleRecover : handleBackup}
+          disabled={status === "loading" || !password}
+          className="bg-purple text-white px-6 py-2 rounded-xl font-bold hover:bg-purple-bright disabled:opacity-50"
+        >
+          {status === "loading" ? "Processing..." : (!hasLocalKey && hasServerBackup ? "Recover Key" : "Backup Key")}
+        </button>
+      </div>
+      {msg && <p className={`text-sm font-medium ${status === 'error' ? 'text-pink' : 'text-green'}`}>{msg}</p>}
+    </div>
+  );
+}
 
 export function ProfileForm() {
   const { user, refreshUser, logout } = useAuth();
@@ -236,6 +331,9 @@ export function ProfileForm() {
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Changes"}
         </button>
       </div>
+
+      {/* E2EE Manager Section */}
+      <E2EEManager user={user} />
 
       <div className="mt-8 pt-8 border-t border-purple-light/20 flex justify-end">
         <button 

@@ -37,14 +37,18 @@ export function AuthProvider({ children, initialUser = null }: { children: React
       if (u) {
         let privKey = localStorage.getItem(`privKey_${u.id}`);
         if (!privKey) {
-          try {
-            const keypair = await generateKeyPair();
-            const privStr = await exportKey(keypair.privateKey);
-            const pubStr = await exportKey(keypair.publicKey);
-            localStorage.setItem(`privKey_${u.id}`, privStr);
-            await setPublicKeyAction(pubStr);
-          } catch(err) {
-            console.error("Failed to generate E2EE keys", err);
+          // If the user already has keys on the server, they are on a new device.
+          // Do NOT overwrite their keys. They must recover via Profile Settings.
+          if (!u.publicKey && !u.encryptedPrivateKey) {
+            try {
+              const keypair = await generateKeyPair();
+              const privStr = await exportKey(keypair.privateKey);
+              const pubStr = await exportKey(keypair.publicKey);
+              localStorage.setItem(`privKey_${u.id}`, privStr);
+              await setPublicKeyAction(pubStr);
+            } catch(err) {
+              console.error("Failed to generate E2EE keys", err);
+            }
           }
         }
       }

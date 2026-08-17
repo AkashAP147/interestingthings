@@ -19,6 +19,8 @@ export interface User {
   streakCount?: number;
   curiosityPoints?: number;
   bio?: string;
+  encryptedPrivateKey?: string; // stringified JSON object
+  publicKey?: string;
 }
 
 const COLLECTION = 'users';

@@ -557,6 +557,16 @@ export async function setPublicKeyAction(publicKey: string) {
   return { success: true };
 }
 
+export async function backupPrivateKeyAction(encryptedPrivateKeyStr: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false };
+
+  const { database } = await import("@/lib/firebase");
+  await database.ref(`users/${currentUserId}/encryptedPrivateKey`).set(encryptedPrivateKeyStr);
+  return { success: true };
+}
+
 export async function createPostAction(formData: FormData) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction } from "@/app/actions";
-import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck } from "lucide-react";
+import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -314,8 +314,32 @@ export default function MessagesPage() {
   const activeChatData = chats.find(c => c.id === activeChatId);
   const activeChatOtherUser = activeChatData?.otherUser;
 
+  // Check for missing local key
+  const isMissingKey = typeof window !== 'undefined' ? !localStorage.getItem(`privKey_${user?.id}`) && user?.publicKey : false;
+
   return (
     <>
+      {/* Missing Key Warning Overlay */}
+      {isMissingKey && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-navy-deep p-8 rounded-3xl max-w-md text-center shadow-2xl relative">
+            <div className="w-16 h-16 bg-pink/10 text-pink rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-navy-dark dark:text-white mb-2">Messages Locked</h2>
+            <p className="text-gray-text mb-6">
+              You are logging in from a new device. To read your encrypted messages, you must unlock your encryption key using your Master Password.
+            </p>
+            <Link 
+              href="/profile"
+              className="inline-block w-full bg-purple text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-bright transition-colors"
+            >
+              Go to Profile to Unlock
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-purple-light/20 flex-col bg-white dark:bg-navy-dark h-full ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
         {/* Header / New Chat */}

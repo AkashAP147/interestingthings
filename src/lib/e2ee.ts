@@ -242,3 +242,79 @@ export async function decryptPayload(
     return null;
   }
 }
+
+// --- Master Password Key Backup ---
+
+// Derive an AES-GCM key from a password using PBKDF2
+export async function deriveKeyFromPassword(password: string, saltBase64: string): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  const keyMaterial = await window.crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits", "deriveKey"]
+  );
+
+  const saltBuffer = new Uint8Array(atob(saltBase64).split("").map(c => c.charCodeAt(0)));
+
+  return window.crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: saltBuffer,
+      iterations: 100000,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
+
+// Encrypt the Private Key string using a Master Password
+export async function encryptPrivateKeyWithPassword(privateKeyBase64: string, password: string) {
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const saltBase64 = btoa(String.fromCharCode.apply(null, Array.from(salt)));
+
+  const aesKey = await deriveKeyFromPassword(password, saltBase64);
+
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encodedText = new TextEncoder().encode(privateKeyBase64);
+  
+  const encryptedContent = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    aesKey,
+    encodedText
+  );
+
+  return {
+    salt: saltBase64,
+    iv: btoa(String.fromCharCode.apply(null, Array.from(iv))),
+    ciphertext: btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(encryptedContent))))
+  };
+}
+
+// Decrypt the Private Key string using a Master Password
+export async function decryptPrivateKeyWithPassword(
+  payload: { salt: string; iv: string; ciphertext: string },
+  password: string
+) {
+  try {
+    const aesKey = await deriveKeyFromPassword(password, payload.salt);
+
+    const iv = new Uint8Array(atob(payload.iv).split("").map(c => c.charCodeAt(0)));
+    const ciphertextBuffer = new Uint8Array(atob(payload.ciphertext).split("").map(c => c.charCodeAt(0)));
+
+    const decryptedContent = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv },
+      aesKey,
+      ciphertextBuffer
+    );
+
+    return new TextDecoder().decode(decryptedContent);
+  } catch (error) {
+    console.error("Master password decryption failed", error);
+    return null;
+  }
+}
