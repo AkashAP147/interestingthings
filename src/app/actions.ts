@@ -40,10 +40,20 @@ export async function syncAuthTokenAction(idToken: string | null) {
   }
 
   try {
-    await import("@/lib/firebase"); // Ensure admin is initialized
-    const { getAuth } = await import("firebase-admin/auth");
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
     
-    const decoded = await getAuth().verifyIdToken(idToken);
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error?.message || "Invalid token");
+    }
+    
+    const data = await res.json();
+    const user = data.users[0];
+    const decoded = { uid: user.localId, email: user.email, name: user.displayName };
     
     const { syncFirebaseUser } = await import("@/lib/user-db");
     await syncFirebaseUser(decoded.uid, decoded.email || decoded.phone_number || "unknown", decoded.name);
