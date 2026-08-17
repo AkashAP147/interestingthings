@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, Share, ArrowRight } from "lucide-react";
+import { Heart, Share, ArrowRight, Check } from "lucide-react";
 import { Discovery, Category } from "@/types";
 import { categories } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -26,6 +26,7 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
   const initialLiked = user?.likes?.includes(discovery.id) || false;
   const [isLiked, setIsLiked] = useState(initialLiked);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
     setIsLiked(user?.likes?.includes(discovery.id) || false);
@@ -58,6 +59,32 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
   const handleDoubleClick = () => {
     if (discovery.sourceUrl) {
       window.open(discovery.sourceUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const shareUrl = `${window.location.origin}/discover/${discovery.slug}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: discovery.title,
+          text: `Check out ${discovery.title} on TIMIT`,
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }
+    } catch (err) {
+      // AbortError is normal if user cancels the native share sheet
+      if ((err as Error).name !== 'AbortError') {
+        console.error("Error sharing:", err);
+      }
     }
   };
 
@@ -143,8 +170,15 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
                   {Math.max(0, discovery.saves + (isLiked && !initialLiked ? 1 : 0) - (!isLiked && initialLiked ? 1 : 0))}
                 </span>
               </div>
-              <button className="text-gray-text hover:text-blue transition-colors p-1" aria-label="Share">
-                <Share className="h-5 w-5" />
+              <button 
+                onClick={handleShare}
+                className={`p-1 rounded-full transition-colors ${
+                  isCopied ? "text-green" : "text-gray-text hover:text-blue hover:bg-blue/10"
+                }`} 
+                aria-label="Share"
+                title={isCopied ? "Copied!" : "Share"}
+              >
+                {isCopied ? <Check className="h-5 w-5" /> : <Share className="h-5 w-5" />}
               </button>
             </div>
           </div>
