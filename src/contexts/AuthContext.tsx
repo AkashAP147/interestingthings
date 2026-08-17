@@ -10,7 +10,8 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isModalOpen: boolean;
-  openModal: () => void;
+  modalMode: "login" | "signup";
+  openModal: (mode?: "login" | "signup") => void;
   closeModal: () => void;
   refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
@@ -18,10 +19,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export function AuthProvider({ children, initialUser = null }: { children: ReactNode, initialUser?: User | null }) {
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [isLoading, setIsLoading] = useState(!initialUser); // If we have user, don't flash loading
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"login" | "signup">("login");
 
   const refreshUser = async () => {
     setIsLoading(true);
@@ -37,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsLoading(true);
       try {
         if (firebaseUser) {
           const token = await firebaseUser.getIdToken();
@@ -58,16 +59,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const openModal = () => setIsModalOpen(true);
+  const openModal = (mode: "login" | "signup" = "login") => {
+    setModalMode(mode);
+    setIsModalOpen(true);
+  };
   const closeModal = () => setIsModalOpen(false);
 
   const logout = async () => {
     await signOut(auth);
     // syncAuthTokenAction(null) will be called by the listener
+    window.location.href = "/";
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isModalOpen, openModal, closeModal, refreshUser, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isModalOpen, modalMode, openModal, closeModal, refreshUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

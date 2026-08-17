@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/AuthModal";
+import { getCurrentUserAction } from "@/app/actions";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -21,15 +22,17 @@ export const metadata: Metadata = {
   description: "Discover the weirdest websites, strangest products, fascinating datasets, crazy inventions and beautiful corners of the internet.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialUser = await getCurrentUserAction();
+
   return (
     <html lang="en" className="scroll-smooth">
       <body className={`${inter.variable} ${outfit.variable} antialiased min-h-screen flex flex-col bg-background text-foreground pt-[73px]`}>
-        <AuthProvider>
+        <AuthProvider initialUser={initialUser}>
           <Navbar />
           <main className="flex-grow flex flex-col">
             {children}

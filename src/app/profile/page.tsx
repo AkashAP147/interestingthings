@@ -14,12 +14,32 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
   const savedDiscoveries = await getDailyDiscoveries();
   const currentTab = searchParams?.tab || "saved";
 
+  const activityDates = user.activityDates || [];
+  const streakCount = user.streakCount || 0;
+  
+  // Get current week's dates (Mon - Sun)
+  const todayDate = new Date();
+  const day = todayDate.getDay();
+  const diffToMonday = todayDate.getDate() - day + (day === 0 ? -6 : 1); 
+  const monday = new Date(todayDate.setDate(diffToMonday));
+  
+  const weekDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  const weekActivity = weekDays.map((name, index) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + index);
+    const dateString = d.toISOString().split("T")[0];
+    return {
+      name,
+      active: activityDates.includes(dateString)
+    };
+  });
+
   return (
     <div className="px-6 lg:px-8 max-w-7xl mx-auto w-full py-12 flex flex-col gap-12">
       {/* Profile Header & Streak */}
       <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 bg-white dark:bg-navy-deep p-8 rounded-3xl shadow-sm border border-purple-light/20">
         <div className="flex items-center gap-6">
-          <div className="h-24 w-24 rounded-full bg-gradient-to-br from-purple to-pink flex items-center justify-center overflow-hidden text-white font-heading text-3xl font-bold shadow-md">
+          <div className="h-24 w-24 shrink-0 rounded-full bg-gradient-to-br from-purple to-pink flex items-center justify-center overflow-hidden text-white font-heading text-3xl font-bold shadow-md">
             {user.profilePicture ? (
               <img src={user.profilePicture} alt={user.name || "User"} className="w-full h-full object-cover" />
             ) : (
@@ -32,8 +52,8 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
             </h1>
             <p className="text-gray-text mt-1">@{user.username || user.id}</p>
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-sm font-semibold text-orange bg-orange/10 px-3 py-1 rounded-full">
-                120 Curiosity Points
+              <span className="text-sm font-semibold text-orange bg-orange/10 px-3 py-1 rounded-full animate-in slide-in-from-bottom-2 fade-in duration-500">
+                {user.curiosityPoints || 0} Curiosity Points
               </span>
             </div>
           </div>
@@ -42,37 +62,19 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
         {/* Streak Component */}
         <div className="bg-purple-light/30 dark:bg-navy-dark p-6 rounded-2xl flex flex-col items-center">
           <h3 className="font-heading font-semibold text-navy-dark dark:text-white flex items-center gap-2 mb-4">
-            <Flame className="h-5 w-5 text-orange" /> 5 Day Curiosity Streak
+            <Flame className="h-5 w-5 text-orange" /> {streakCount} Day Curiosity Streak
           </h3>
           <div className="flex gap-2 text-sm font-medium text-gray-text">
-            <div className="flex flex-col items-center gap-2">
-              <span>MON</span>
-              <span className="text-orange">✓</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>TUE</span>
-              <span className="text-orange">✓</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>WED</span>
-              <span className="text-orange">✓</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>THU</span>
-              <span className="text-orange">✓</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>FRI</span>
-              <span className="text-orange">✓</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>SAT</span>
-              <span className="text-gray-300 dark:text-gray-700">○</span>
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span>SUN</span>
-              <span className="text-gray-300 dark:text-gray-700">○</span>
-            </div>
+            {weekActivity.map((day, idx) => (
+              <div key={idx} className="flex flex-col items-center gap-2">
+                <span>{day.name}</span>
+                {day.active ? (
+                  <span className="text-orange">✓</span>
+                ) : (
+                  <span className="text-gray-300 dark:text-gray-700">○</span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>

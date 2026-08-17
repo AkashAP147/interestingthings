@@ -46,7 +46,7 @@ export async function syncAuthTokenAction(idToken: string | null) {
     const decoded = await getAuth().verifyIdToken(idToken);
     
     const { syncFirebaseUser } = await import("@/lib/user-db");
-    await syncFirebaseUser(decoded.uid, decoded.email || decoded.phone_number || "unknown");
+    await syncFirebaseUser(decoded.uid, decoded.email || decoded.phone_number || "unknown", decoded.name);
 
     cookieStore.set("auth_user", decoded.uid, {
       httpOnly: true,
@@ -61,20 +61,7 @@ export async function syncAuthTokenAction(idToken: string | null) {
   }
 }
 
-export async function adminLoginAction(id: string, pass: string) {
-  if (id.toLowerCase() === "akash" && pass === "96500") {
-    const user = await findOrCreateUser("akash");
-    const cookieStore = await cookies();
-    cookieStore.set("auth_user", user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: "/",
-    });
-    return { success: true };
-  }
-  return { success: false, error: "Invalid admin credentials" };
-}
+
 
 export async function logoutAction() {
   const cookieStore = await cookies();
@@ -98,6 +85,22 @@ export async function toggleLikeAction(discoveryId: string) {
   const result = await toggleLike(userId, discoveryId);
   revalidatePath("/");
   revalidatePath("/discover");
+  return result;
+}
+
+export async function toggleFollowAction(targetUserId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) throw new Error("Unauthorized");
+  
+  const { toggleFollow } = await import("@/lib/user-db");
+  const result = await toggleFollow(currentUserId, targetUserId);
+  
+  // Revalidate paths where follow state might be shown
+  revalidatePath("/");
+  revalidatePath("/profile");
+  revalidatePath(`/profile/[username]`, "page");
+  
   return result;
 }
 
@@ -150,9 +153,9 @@ export async function submitContactMessage(formData: FormData) {
   
   if (!name || !email || !message) return { success: false, error: "Missing fields" };
   
-  const { firestore } = await import("@/lib/firebase");
+  const { database } = await import("@/lib/firebase");
   
-  await firestore.collection("messages").add({
+  await database.ref("contactMessages").push({
     name,
     email,
     message,
@@ -180,6 +183,7 @@ export async function updateUserProfileAction(formData: FormData) {
   const name = formData.get("name") as string || "";
   const username = formData.get("username") as string || "";
   const contact = formData.get("contact") as string || "";
+  const phone = formData.get("phone") as string || "";
   const profilePicture = formData.get("profilePicture") as string || "";
 
   if (username) {
@@ -200,6 +204,7 @@ export async function updateUserProfileAction(formData: FormData) {
     name,
     username,
     contact,
+    phone,
     profilePicture,
   };
 
@@ -211,4 +216,286 @@ export async function updateUserProfileAction(formData: FormData) {
   revalidatePath("/profile");
   revalidatePath("/");
   return { success: true, user };
+}
+
+export async function trackDailyActivityAction() {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false };
+
+  const { getUserById, updateUserProfile } = await import("@/lib/user-db");
+  const user = await getUserById(userId);
+  if (!user) return { success: false };
+
+  // Use local time for the streak to match user expectation, simplified to UTC for server
+  // More complex apps might track timezone, but for this demo UTC is fine.
+  const today = new Date().toISOString().split("T")[0]; 
+  const activityDates = user.activityDates || [];
+
+  if (activityDates.includes(today)) {
+    return { success: true, updated: false }; 
+  }
+
+  // Calculate streak and award points
+  let streakCount = user.streakCount || 0;
+  let curiosityPoints = user.curiosityPoints || 0;
+  
+  curiosityPoints += 10; // Award 10 points for visiting today
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  if (activityDates.includes(yesterdayStr)) {
+    streakCount += 1;
+  } else {
+    streakCount = 1;
+  }
+
+  const newActivityDates = [...activityDates, today];
+
+  await updateUserProfile(userId, {
+    activityDates: newActivityDates,
+    streakCount,
+    curiosityPoints,
+  });
+
+  return { success: true, updated: true };
+}
+
+export async function setUsernameAction(username: string) {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false, error: "Not logged in" };
+
+  const { isUsernameTaken, updateUserProfile } = await import("@/lib/user-db");
+  
+  // Format username (lowercase, remove @ if added)
+  const formattedUsername = username.trim().toLowerCase().replace(/^@/, '');
+  if (!formattedUsername) return { success: false, error: "Username cannot be empty" };
+
+  const taken = await isUsernameTaken(formattedUsername, userId);
+  if (taken) {
+    return { success: false, error: "This username is already taken" };
+  }
+
+  await updateUserProfile(userId, { username: formattedUsername });
+  return { success: true };
+}
+
+export async function resolveUsernameToEmailAction(username: string) {
+  const { getUserByIdentifier } = await import("@/lib/user-db");
+  const formattedUsername = username.trim().toLowerCase().replace(/^@/, '');
+  
+  if (!formattedUsername) return null;
+  
+  const user = await getUserByIdentifier(formattedUsername);
+  
+  // Return the contact email if the user exists and it's a valid email
+  if (user && user.contact && user.contact.includes("@")) {
+    return user.contact;
+  }
+  
+  return null;
+}
+
+export async function startChatAction(targetUsername: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { getUserByIdentifier } = await import("@/lib/user-db");
+  const { database } = await import("@/lib/firebase");
+  const formattedUsername = targetUsername.trim().toLowerCase().replace(/^@/, '');
+  
+  if (!formattedUsername) return { success: false, error: "Invalid username" };
+  
+  const targetUser = await getUserByIdentifier(formattedUsername);
+  if (!targetUser) return { success: false, error: "User not found" };
+  
+  if (targetUser.id === currentUserId) {
+    return { success: false, error: "You cannot chat with yourself" };
+  }
+
+  // Check if chat already exists
+  const userChatsRef = database.ref(`userChats/${currentUserId}`);
+  const userChatsSnap = await userChatsRef.once('value');
+  const userChats = userChatsSnap.val() || {};
+  
+  let existingChatId = null;
+  for (const chatId of Object.keys(userChats)) {
+    const chatSnap = await database.ref(`chats/${chatId}`).once('value');
+    const chatData = chatSnap.val();
+    if (chatData && chatData.participants && chatData.participants[targetUser.id]) {
+      existingChatId = chatId;
+      break;
+    }
+  }
+
+  if (existingChatId) {
+    return { success: true, chatId: existingChatId };
+  }
+
+  // Create new chat
+  const newChatRef = database.ref('chats').push();
+  const chatId = newChatRef.key;
+  
+  const newChat = {
+    id: chatId,
+    participants: {
+      [currentUserId]: true,
+      [targetUser.id]: true
+    },
+    updatedAt: new Date().toISOString(),
+    lastMessage: ""
+  };
+
+  await newChatRef.set(newChat);
+  await database.ref(`userChats/${currentUserId}/${chatId}`).set(true);
+  await database.ref(`userChats/${targetUser.id}/${chatId}`).set(true);
+  
+  return { success: true, chatId };
+}
+
+export async function sendMessageAction(chatId: string, text: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  if (!text.trim()) return { success: false, error: "Empty message" };
+
+  const { database } = await import("@/lib/firebase");
+  const chatRef = database.ref(`chats/${chatId}`);
+  const chatSnap = await chatRef.once('value');
+  
+  if (!chatSnap.exists()) return { success: false, error: "Chat not found" };
+  const chatData = chatSnap.val();
+  
+  if (!chatData.participants || !chatData.participants[currentUserId]) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const timestamp = new Date().toISOString();
+
+  // Add message
+  await database.ref(`messages/${chatId}`).push({
+    senderId: currentUserId,
+    text: text.trim(),
+    createdAt: timestamp
+  });
+
+  // Update last message preview
+  await chatRef.update({
+    lastMessage: text.trim().substring(0, 50),
+    updatedAt: timestamp
+  });
+
+  return { success: true };
+}
+
+export async function getChatsAction() {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  const { getUserById } = await import("@/lib/user-db");
+  const userChatsSnap = await database.ref(`userChats/${currentUserId}`).once('value');
+  const userChats = userChatsSnap.val() || {};
+  
+  const chats = [];
+  for (const chatId of Object.keys(userChats)) {
+    const chatSnap = await database.ref(`chats/${chatId}`).once('value');
+    if (chatSnap.exists()) {
+      const data = chatSnap.val();
+      const participants = Object.keys(data.participants || {});
+      const otherUserId = participants.find(id => id !== currentUserId) || currentUserId;
+      const otherUser = await getUserById(otherUserId);
+      
+      chats.push({
+        id: chatId,
+        participants,
+        otherUser: otherUser ? {
+          id: otherUser.id,
+          name: otherUser.name || otherUser.username || "Unknown User",
+          username: otherUser.username || null,
+          profilePicture: otherUser.profilePicture || null,
+        } : null,
+        lastMessage: data.lastMessage,
+        updatedAt: data.updatedAt
+      });
+    }
+  }
+  
+  chats.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return { success: true, chats };
+}
+
+export async function getMessagesAction(chatId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  const chatSnap = await database.ref(`chats/${chatId}`).once('value');
+  
+  if (!chatSnap.exists()) return { success: false, error: "Chat not found" };
+  const chatData = chatSnap.val();
+  
+  if (!chatData.participants || !chatData.participants[currentUserId]) {
+    return { success: false, error: "Unauthorized" };
+  }
+  
+  const messagesSnap = await database.ref(`messages/${chatId}`).once('value');
+  const messagesObj = messagesSnap.val() || {};
+  
+  const messages = Object.keys(messagesObj).map(key => ({
+    id: key,
+    ...messagesObj[key]
+  }))
+  .filter((msg: any) => !(msg.deletedBy || []).includes(currentUserId))
+  .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  
+  return { success: true, messages };
+}
+
+export async function deleteMessageAction(chatId: string, messageId: string, forEveryone: boolean) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  const msgRef = database.ref(`messages/${chatId}/${messageId}`);
+  const msgSnap = await msgRef.once('value');
+  
+  if (!msgSnap.exists()) return { success: false, error: "Message not found" };
+  const msgData = msgSnap.val();
+  
+  if (forEveryone) {
+    if (msgData.senderId !== currentUserId) {
+      return { success: false, error: "Can only delete your own messages for everyone" };
+    }
+    await msgRef.update({
+      text: "This message was deleted",
+      isDeleted: true
+    });
+  } else {
+    const deletedBy = msgData.deletedBy || [];
+    if (!deletedBy.includes(currentUserId)) {
+      deletedBy.push(currentUserId);
+      await msgRef.update({ deletedBy });
+    }
+  }
+
+  return { success: true };
+}
+
+export async function setPublicKeyAction(publicKey: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false };
+
+  const { database } = await import("@/lib/firebase");
+  await database.ref(`users/${currentUserId}/publicKey`).set(publicKey);
+  return { success: true };
 }

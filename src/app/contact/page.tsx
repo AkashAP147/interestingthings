@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Send, Mail, MessageSquare, Code2 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
+import { useAuth } from "@/contexts/AuthContext";
 
 import { submitContactMessage } from "@/app/actions";
 
 export default function ContactPage() {
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -62,36 +64,59 @@ export default function ContactPage() {
             ) : (
               <form onSubmit={handleSubmit} className="bg-white/50 dark:bg-navy-deep/50 p-8 sm:p-10 rounded-3xl border border-purple-light/20 dark:border-white/5 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label htmlFor="name" className="block text-sm font-semibold leading-6 text-navy-dark dark:text-white">
-                      Name
-                    </label>
-                    <div className="mt-2.5">
-                      <input
-                        type="text"
-                        name="name"
-                        id="name"
-                        required
-                        className="block w-full rounded-xl border-0 px-4 py-3.5 text-navy-dark dark:text-white shadow-sm ring-1 ring-inset ring-purple-light/50 dark:ring-white/10 bg-white dark:bg-navy-dark/80 focus:ring-2 focus:ring-inset focus:ring-purple-bright sm:text-sm sm:leading-6 transition-all outline-none"
-                        placeholder="Anonymous Surfer"
-                      />
-                    </div>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="email" className="block text-sm font-semibold leading-6 text-navy-dark dark:text-white">
-                      Email
-                    </label>
-                    <div className="mt-2.5">
-                      <input
-                        type="email"
-                        name="email"
-                        id="email"
-                        required
-                        className="block w-full rounded-xl border-0 px-4 py-3.5 text-navy-dark dark:text-white shadow-sm ring-1 ring-inset ring-purple-light/50 dark:ring-white/10 bg-white dark:bg-navy-dark/80 focus:ring-2 focus:ring-inset focus:ring-purple-bright sm:text-sm sm:leading-6 transition-all outline-none"
-                        placeholder="you@example.com"
-                      />
-                    </div>
-                  </div>
+                  {!user ? (
+                    <>
+                      <div className="sm:col-span-2">
+                        <label htmlFor="name" className="block text-sm font-semibold leading-6 text-navy-dark dark:text-white">
+                          Name
+                        </label>
+                        <div className="mt-2.5">
+                          <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            required
+                            className="block w-full rounded-xl border-0 px-4 py-3.5 text-navy-dark dark:text-white shadow-sm ring-1 ring-inset ring-purple-light/50 dark:ring-white/10 bg-white dark:bg-navy-dark/80 focus:ring-2 focus:ring-inset focus:ring-purple-bright sm:text-sm sm:leading-6 transition-all outline-none"
+                            placeholder="Anonymous Surfer"
+                          />
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label htmlFor="email" className="block text-sm font-semibold leading-6 text-navy-dark dark:text-white">
+                          Email
+                        </label>
+                        <div className="mt-2.5">
+                          <input
+                            type="email"
+                            name="email"
+                            id="email"
+                            required
+                            className="block w-full rounded-xl border-0 px-4 py-3.5 text-navy-dark dark:text-white shadow-sm ring-1 ring-inset ring-purple-light/50 dark:ring-white/10 bg-white dark:bg-navy-dark/80 focus:ring-2 focus:ring-inset focus:ring-purple-bright sm:text-sm sm:leading-6 transition-all outline-none"
+                            placeholder="you@example.com"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input type="hidden" name="name" value={user.name || user.username || "Authenticated User"} />
+                      <input type="hidden" name="email" value={user.contact || ""} />
+                      <div className="sm:col-span-2 bg-purple-light/10 p-4 rounded-2xl flex items-center gap-4 border border-purple-light/30 shadow-sm mb-2">
+                        <div className="h-12 w-12 rounded-full overflow-hidden bg-gradient-to-br from-purple to-pink flex items-center justify-center text-white font-bold text-xl shadow-md shrink-0">
+                          {user.profilePicture ? (
+                            <img src={user.profilePicture} alt="Profile" className="h-full w-full object-cover" />
+                          ) : (
+                            (user.name || user.username || "U")[0].toUpperCase()
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-purple tracking-wider uppercase mb-0.5">Sending as</p>
+                          <p className="font-bold text-navy-dark dark:text-white text-lg leading-tight">{user.name || user.username}</p>
+                          {user.contact && <p className="text-sm text-gray-text">{user.contact}</p>}
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <div className="sm:col-span-2">
                     <label htmlFor="message" className="block text-sm font-semibold leading-6 text-navy-dark dark:text-white">
                       Message

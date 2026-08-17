@@ -1,8 +1,15 @@
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { getTrendingDiscoveries } from "@/lib/data";
 import { TrendingUp } from "lucide-react";
+import { getCurrentUserAction } from "@/app/actions";
+import { redirect } from "next/navigation";
 
 export default async function TrendingPage() {
+  const user = await getCurrentUserAction();
+  if (!user) {
+    redirect("/");
+  }
+
   const trendingDiscoveries = await getTrendingDiscoveries();
 
   return (

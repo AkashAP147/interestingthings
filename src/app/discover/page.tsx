@@ -1,8 +1,15 @@
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { getAllDiscoveries } from "@/lib/data";
 import { DiscoverFilters } from "@/components/DiscoverFilters";
+import { getCurrentUserAction } from "@/app/actions";
+import { redirect } from "next/navigation";
 
 export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; category?: string; sort?: string }> }) {
+  const user = await getCurrentUserAction();
+  if (!user) {
+    redirect("/");
+  }
+
   const params = await searchParams;
   let discoveries = await getAllDiscoveries();
 

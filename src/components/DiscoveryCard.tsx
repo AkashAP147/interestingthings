@@ -8,7 +8,7 @@ import { categories } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { toggleLikeAction } from "@/app/actions";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 interface DiscoveryCardProps {
@@ -25,6 +25,10 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
   const initialLiked = user?.likes?.includes(discovery.id) || false;
   const [isLiked, setIsLiked] = useState(initialLiked);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    setIsLiked(user?.likes?.includes(discovery.id) || false);
+  }, [user?.likes, discovery.id]);
 
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -111,7 +115,7 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
                 <Heart className="h-5 w-5" fill={isLiked ? "currentColor" : "none"} />
               </motion.button>
               <span className="text-sm font-semibold text-gray-text">
-                {discovery.saves + (isLiked && !initialLiked ? 1 : 0) - (!isLiked && initialLiked ? 1 : 0)}
+                {Math.max(0, discovery.saves + (isLiked && !initialLiked ? 1 : 0) - (!isLiked && initialLiked ? 1 : 0))}
               </span>
             </div>
             <button className="text-gray-text hover:text-blue transition-colors p-1" aria-label="Share">

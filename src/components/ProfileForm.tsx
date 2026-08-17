@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Camera, CheckCircle2, User, AtSign, Phone } from "lucide-react";
+import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateUserProfileAction } from "@/app/actions";
 
@@ -13,6 +13,7 @@ export function ProfileForm() {
   
   // State for the uploaded image base64 string
   const [previewImage, setPreviewImage] = useState(user?.profilePicture || "");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
@@ -33,7 +34,7 @@ export function ProfileForm() {
       img.onload = () => {
         // Resize image to max 400x400 to keep base64 string small
         const canvas = document.createElement("canvas");
-        const MAX_SIZE = 400;
+        const MAX_SIZE = 1200;
         let width = img.width;
         let height = img.height;
 
@@ -54,8 +55,8 @@ export function ProfileForm() {
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0, width, height);
         
-        // Convert back to base64 (jpeg for smaller size)
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        // Convert back to base64 (webp for better quality and compression)
+        const dataUrl = canvas.toDataURL("image/webp", 0.92);
         setPreviewImage(dataUrl);
         setError("");
       };
@@ -91,10 +92,7 @@ export function ProfileForm() {
       
       {/* Profile Picture (Clickable Avatar) */}
       <div className="flex flex-col items-center justify-center mb-6">
-        <div 
-          className="relative group cursor-pointer"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <div className="relative group">
           <div className="w-32 h-32 rounded-full bg-purple-light/20 flex items-center justify-center overflow-hidden border-4 border-white dark:border-navy-dark shadow-md transition-transform group-hover:scale-105">
             {previewImage ? (
               <img src={previewImage} alt="Profile" className="w-full h-full object-cover" />
@@ -102,20 +100,29 @@ export function ProfileForm() {
               <User className="h-12 w-12 text-purple" />
             )}
             {/* Overlay for hover */}
-            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="h-8 w-8 text-white mb-1" />
-              <span className="text-white text-xs font-semibold">Change</span>
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              {previewImage && (
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsPreviewOpen(true); }}
+                  className="p-2 bg-white/20 hover:bg-white/40 rounded-full transition-colors text-white"
+                  title="Preview"
+                >
+                  <Eye className="h-5 w-5" />
+                </button>
+              )}
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                className="p-2 bg-white/20 hover:bg-white/40 rounded-full transition-colors text-white"
+                title="Change Photo"
+              >
+                <Camera className="h-5 w-5" />
+              </button>
             </div>
           </div>
-          
-          <button 
-            type="button"
-            className="absolute bottom-0 right-2 bg-purple text-white p-2.5 rounded-full shadow-lg hover:bg-purple-bright transition-colors group-hover:scale-110"
-          >
-            <Camera className="h-4 w-4" />
-          </button>
         </div>
-        <p className="text-sm text-gray-text mt-4 font-medium">Click your avatar to upload a new photo</p>
+        <p className="text-sm text-gray-text mt-4 font-medium">Hover to preview or change your avatar</p>
         
         <input 
           type="file" 
@@ -163,19 +170,35 @@ export function ProfileForm() {
           </div>
         </div>
 
-        {/* Contact (Email/Phone) */}
-        <div className="sm:col-span-2">
+        {/* Email Address */}
+        <div>
           <label className="block text-sm font-semibold text-navy-dark dark:text-white mb-2">
-            Contact (Email or Phone)
+            Email Address
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input 
+              name="contact"
+              type="email"
+              defaultValue={user.contact || ""}
+              placeholder="Your email address"
+              className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 dark:bg-navy-dark border-0 ring-1 ring-inset ring-purple-light/30 focus:ring-2 focus:ring-purple text-navy-dark dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* Mobile Number */}
+        <div>
+          <label className="block text-sm font-semibold text-navy-dark dark:text-white mb-2">
+            Mobile Number
           </label>
           <div className="relative">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input 
-              name="contact"
-              type="text"
-              defaultValue={user.contact || ""}
-              placeholder="Email or phone number"
-              required
+              name="phone"
+              type="tel"
+              defaultValue={user.phone || ""}
+              placeholder="Your mobile number"
               className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 dark:bg-navy-dark border-0 ring-1 ring-inset ring-purple-light/30 focus:ring-2 focus:ring-purple text-navy-dark dark:text-white"
             />
           </div>
@@ -199,6 +222,30 @@ export function ProfileForm() {
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Changes"}
         </button>
       </div>
+
+      {/* Image Preview Modal */}
+      {isPreviewOpen && previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <div className="relative max-w-2xl max-h-[90vh] w-full flex justify-center animate-in zoom-in-95 duration-200">
+            <button 
+              type="button"
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 p-2 transition-colors"
+              onClick={() => setIsPreviewOpen(false)}
+            >
+              <X className="h-8 w-8" />
+            </button>
+            <img 
+              src={previewImage} 
+              alt="Profile Preview" 
+              className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border-4 border-white/10" 
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </form>
   );
 }

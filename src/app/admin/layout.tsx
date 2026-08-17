@@ -3,7 +3,7 @@ import { getCurrentUserAction } from "@/app/actions";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUserAction();
-  if (user?.contact !== "akash") {
+  if (user?.role !== "admin") {
     redirect("/");
   }
   return <>{children}</>;

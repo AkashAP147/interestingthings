@@ -1,4 +1,4 @@
-import { firestore } from './firebase';
+import { database } from './firebase';
 
 export interface User {
   id: string;
@@ -6,21 +6,27 @@ export interface User {
   verified: boolean;
   likes: string[]; // array of discovery IDs
   shares: string[]; // array of discovery IDs
+  followers?: string[]; // array of user IDs
+  following?: string[]; // array of user IDs
   joinedAt: string;
   passwordHash?: string;
   name?: string;
   username?: string;
   profilePicture?: string;
+  phone?: string;
+  role?: string;
+  activityDates?: string[];
+  streakCount?: number;
+  curiosityPoints?: number;
 }
 
 const COLLECTION = 'users';
 
 export async function readUsersDB(): Promise<User[]> {
   try {
-    const snapshot = await firestore.collection(COLLECTION).get();
-    const users: User[] = [];
-    snapshot.forEach(doc => users.push(doc.data() as User));
-    return users;
+    const snapshot = await database.ref(COLLECTION).once('value');
+    const data = snapshot.val() || {};
+    return Object.keys(data).map(key => data[key] as User);
   } catch (error) {
     console.error("Failed to read users DB:", error);
     return [];
@@ -32,9 +38,11 @@ export async function writeUsersDB(users: User[]): Promise<void> {
 }
 
 export async function findOrCreateUser(contact: string): Promise<User> {
-  const snapshot = await firestore.collection(COLLECTION).where('contact', '==', contact).limit(1).get();
-  if (!snapshot.empty) {
-    return snapshot.docs[0].data() as User;
+  const snapshot = await database.ref(COLLECTION).orderByChild('contact').equalTo(contact).limitToFirst(1).once('value');
+  const data = snapshot.val();
+  if (data) {
+    const key = Object.keys(data)[0];
+    return data[key] as User;
   }
 
   const newUser: User = {
@@ -46,106 +54,204 @@ export async function findOrCreateUser(contact: string): Promise<User> {
     joinedAt: new Date().toISOString()
   };
 
-  await firestore.collection(COLLECTION).doc(newUser.id).set(newUser);
+  await database.ref(`${COLLECTION}/${newUser.id}`).set(newUser);
   return newUser;
 }
 
 export async function getUserByIdentifier(identifier: string): Promise<User | null> {
-  let snapshot = await firestore.collection(COLLECTION).where('contact', '==', identifier).limit(1).get();
-  if (!snapshot.empty) {
-    return snapshot.docs[0].data() as User;
+  try {
+    let snapshot = await database.ref(COLLECTION).orderByChild('contact').equalTo(identifier).limitToFirst(1).once('value');
+    let data = snapshot.val();
+    if (data) {
+      const key = Object.keys(data)[0];
+      return data[key] as User;
+    }
+    
+    const username = identifier.startsWith('@') ? identifier.slice(1) : identifier;
+    snapshot = await database.ref(COLLECTION).orderByChild('username').equalTo(username).limitToFirst(1).once('value');
+    data = snapshot.val();
+    if (data) {
+      const key = Object.keys(data)[0];
+      return data[key] as User;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error in getUserByIdentifier", error);
+    return null;
   }
-  
-  const username = identifier.startsWith('@') ? identifier.slice(1) : identifier;
-  snapshot = await firestore.collection(COLLECTION).where('username', '==', username).limit(1).get();
-  if (!snapshot.empty) {
-    return snapshot.docs[0].data() as User;
-  }
-  
-  return null;
 }
 
-export async function syncFirebaseUser(uid: string, contact: string): Promise<User> {
-  const docRef = firestore.collection(COLLECTION).doc(uid);
-  const docSnap = await docRef.get();
+export async function syncFirebaseUser(uid: string, contact: string, name?: string): Promise<User> {
+  const docRef = database.ref(`${COLLECTION}/${uid}`);
+  const docSnap = await docRef.once('value');
   
-  if (docSnap.exists) {
-    return docSnap.data() as User;
+  if (docSnap.exists()) {
+    const user = docSnap.val() as User;
+    if (name && !user.name) {
+      await docRef.update({ name });
+      return { ...user, name };
+    }
+    return user;
   }
   
-  const newUser: User = {
+  let finalContact = contact;
+  let username = undefined;
+
+  if (contact.endsWith("@timit.app")) {
+    username = contact.replace("@timit.app", "");
+    finalContact = ""; 
+  }
+  
+  const newUser: any = {
     id: uid,
-    contact,
+    contact: finalContact,
     verified: true,
     likes: [],
     shares: [],
     joinedAt: new Date().toISOString(),
+    role: "user",
+    activityDates: [],
+    streakCount: 0,
+    curiosityPoints: 10,
   };
+  
+  if (username) newUser.username = username;
+  if (name) newUser.name = name;
 
   await docRef.set(newUser);
-  return newUser;
+  return newUser as User;
 }
 
 export async function verifyUser(id: string): Promise<User | null> {
-  const docRef = firestore.collection(COLLECTION).doc(id);
-  const docSnap = await docRef.get();
-  if (!docSnap.exists) return null;
+  const docRef = database.ref(`${COLLECTION}/${id}`);
+  const docSnap = await docRef.once('value');
+  if (!docSnap.exists()) return null;
   
   await docRef.update({ verified: true });
-  const updatedSnap = await docRef.get();
-  return updatedSnap.data() as User;
+  const updatedSnap = await docRef.once('value');
+  return updatedSnap.val() as User;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const docRef = firestore.collection(COLLECTION).doc(id);
-  const docSnap = await docRef.get();
-  if (!docSnap.exists) return null;
-  return docSnap.data() as User;
+  try {
+    const docSnap = await database.ref(`${COLLECTION}/${id}`).once('value');
+    if (!docSnap.exists()) return null;
+    return docSnap.val() as User;
+  } catch (error) {
+    console.error("Error in getUserById", error);
+    return null;
+  }
 }
 
 export async function isUsernameTaken(username: string, currentUserId: string): Promise<boolean> {
   if (!username) return false;
-  const snapshot = await firestore.collection(COLLECTION).where('username', '==', username).get();
-  const exists = snapshot.docs.some(doc => doc.id !== currentUserId);
-  return exists;
+  try {
+    const snapshot = await database.ref(COLLECTION).orderByChild('username').equalTo(username).once('value');
+    const data = snapshot.val();
+    if (!data) return false;
+    return Object.keys(data).some(key => key !== currentUserId);
+  } catch (error) {
+    console.error("Error in isUsernameTaken", error);
+    return false;
+  }
 }
 
 export async function updateUserProfile(id: string, updates: Partial<User>): Promise<User | null> {
-  const docRef = firestore.collection(COLLECTION).doc(id);
-  const docSnap = await docRef.get();
-  if (!docSnap.exists) return null;
+  try {
+    const docRef = database.ref(`${COLLECTION}/${id}`);
+    const docSnap = await docRef.once('value');
+    if (!docSnap.exists()) return null;
 
-  await docRef.update(updates);
-  
-  const updatedSnap = await docRef.get();
-  return updatedSnap.data() as User;
+    await docRef.update(updates);
+    
+    const updatedSnap = await docRef.once('value');
+    return updatedSnap.val() as User;
+  } catch (error) {
+    console.error("Error in updateUserProfile", error);
+    return null;
+  }
 }
 
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function toggleLike(userId: string, discoveryId: string): Promise<{ liked: boolean; user: User | null }> {
-  const docRef = firestore.collection(COLLECTION).doc(userId);
-  const docSnap = await docRef.get();
-  if (!docSnap.exists) return { liked: false, user: null };
-  
-  const user = docSnap.data() as User;
-  const likeIndex = user.likes.indexOf(discoveryId);
-  let liked = false;
-  
-  if (likeIndex === -1) {
-    user.likes.push(discoveryId);
-    liked = true;
-  } else {
-    user.likes.splice(likeIndex, 1);
+  const userRef = database.ref(`users/${userId}`);
+  const discoverySavesRef = database.ref(`discoveries/${discoveryId}/saves`);
+
+  try {
+    let liked = false;
+    let finalUser: User | null = null;
+    
+    await userRef.transaction((user) => {
+      if (user) {
+        if (!user.likes) user.likes = [];
+        const likeIndex = user.likes.indexOf(discoveryId);
+        if (likeIndex === -1) {
+          user.likes.push(discoveryId);
+          liked = true;
+        } else {
+          user.likes.splice(likeIndex, 1);
+          liked = false;
+        }
+        finalUser = user;
+      }
+      return user; // Write back to DB
+    });
+    
+    if (finalUser) {
+      await discoverySavesRef.transaction((currentSaves) => {
+        return (currentSaves || 0) + (liked ? 1 : -1);
+      });
+    }
+    
+    return { liked, user: finalUser };
+  } catch (error) {
+    console.error("Like transaction failed: ", error);
+    return { liked: false, user: null };
   }
+}
 
-  const discoveryRef = firestore.collection('discoveries').doc(discoveryId);
+export async function toggleFollow(currentUserId: string, targetUserId: string): Promise<{ following: boolean }> {
+  if (currentUserId === targetUserId) return { following: false };
 
-  // We should ideally use a transaction, but doing it in sequence is fine for now
-  await docRef.update({ likes: user.likes });
-  await discoveryRef.update({ 
-    saves: FieldValue.increment(liked ? 1 : -1) 
-  });
+  const currentUserRef = database.ref(`users/${currentUserId}`);
+  const targetUserRef = database.ref(`users/${targetUserId}`);
 
-  return { liked, user };
+  try {
+    let isFollowing = false;
+    
+    await currentUserRef.transaction((user) => {
+      if (user) {
+        if (!user.following) user.following = [];
+        const followIndex = user.following.indexOf(targetUserId);
+        if (followIndex === -1) {
+          user.following.push(targetUserId);
+          isFollowing = true;
+        } else {
+          user.following.splice(followIndex, 1);
+          isFollowing = false;
+        }
+      }
+      return user;
+    });
+
+    await targetUserRef.transaction((user) => {
+      if (user) {
+        if (!user.followers) user.followers = [];
+        const followerIndex = user.followers.indexOf(currentUserId);
+        if (isFollowing && followerIndex === -1) {
+          user.followers.push(currentUserId);
+        } else if (!isFollowing && followerIndex !== -1) {
+          user.followers.splice(followerIndex, 1);
+        }
+      }
+      return user;
+    });
+
+    return { following: isFollowing };
+  } catch (error) {
+    console.error("Follow transaction failed: ", error);
+    return { following: false };
+  }
 }

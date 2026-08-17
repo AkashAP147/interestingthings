@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { trackDailyActivityAction } from "@/app/actions";
 import { Menu, X, Globe, Sparkles, User as UserIcon } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscribeButton";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +22,7 @@ const navigation = [
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, openModal } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -31,6 +32,13 @@ export function Navbar() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Track daily activity for the curiosity streak
+  useEffect(() => {
+    if (user?.id) {
+      trackDailyActivityAction().catch(console.error);
+    }
+  }, [user?.id]);
 
   return (
     <header className={cn("fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b border-purple-light/20", isScrolled ? "bg-white/80 dark:bg-navy-deep/80 backdrop-blur-md shadow-sm" : "bg-transparent")}>
@@ -66,6 +74,9 @@ export function Navbar() {
         {/* Desktop Navigation (Center) */}
         <div className="hidden lg:flex lg:gap-x-8">
           {navigation.map((item) => {
+            const isProtected = ["Discover", "Categories", "Trending", "Random"].includes(item.name);
+            if (isProtected && !user) return null;
+
             const isActive = pathname === item.href;
             return (
               <Link
@@ -87,14 +98,20 @@ export function Navbar() {
         {/* Subscribe/User Profile (Right) */}
         <div className="hidden lg:flex lg:flex-1 lg:justify-end items-center gap-4">
           {!user ? (
-            <SubscribeButton variant="nav" />
+            <div className="flex items-center gap-3">
+              <button onClick={() => openModal("login")} className="hidden md:inline-flex bg-blue text-white px-5 py-2.5 text-sm rounded-full font-semibold hover:opacity-90 hover:shadow-md transition-all">Log In</button>
+              <button onClick={() => openModal("signup")} className="hidden md:inline-flex bg-purple text-white px-5 py-2.5 text-sm rounded-full font-semibold hover:bg-purple-bright hover:shadow-md transition-all">Sign Up</button>
+            </div>
           ) : (
             <div className="flex items-center gap-4">
-              {user?.contact?.toLowerCase() === "akash" && (
+              {user?.role === "admin" && (
                 <Link href="/admin" className="text-sm font-semibold text-purple-bright hover:text-purple transition-colors">
                   Admin Panel
                 </Link>
               )}
+              <Link href="/messages" className="text-sm font-semibold text-gray-text hover:text-purple transition-colors">
+                Messages
+              </Link>
               <Link href="/profile" className="flex items-center gap-2 group">
                 <div className="h-8 w-8 rounded-full overflow-hidden bg-purple-light/20 border-2 border-transparent group-hover:border-purple transition-colors flex items-center justify-center">
                   {user.profilePicture ? (
@@ -140,6 +157,9 @@ export function Navbar() {
             <div className="-my-6 divide-y divide-gray-500/10">
               <div className="space-y-2 py-6">
                 {navigation.map((item) => {
+                  const isProtected = ["Discover", "Categories", "Trending", "Random"].includes(item.name);
+                  if (isProtected && !user) return null;
+
                   const isActive = pathname === item.href;
                   return (
                     <Link
@@ -158,10 +178,13 @@ export function Navbar() {
               </div>
               <div className="py-6">
                 {!user ? (
-                  <SubscribeButton variant="mobile" onClick={() => setMobileMenuOpen(false)} />
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => { openModal("login"); setMobileMenuOpen(false); }} className="flex w-full justify-center bg-blue text-white px-5 py-2.5 text-base rounded-full font-semibold hover:opacity-90 hover:shadow-md transition-all">Log In</button>
+                    <button onClick={() => { openModal("signup"); setMobileMenuOpen(false); }} className="flex w-full justify-center bg-purple text-white px-5 py-2.5 text-base rounded-full font-semibold hover:bg-purple-bright hover:shadow-md transition-all mt-2">Sign Up</button>
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {user?.contact?.toLowerCase() === "akash" && (
+                    {user?.role === "admin" && (
                       <Link 
                         href="/admin"
                         onClick={() => setMobileMenuOpen(false)}

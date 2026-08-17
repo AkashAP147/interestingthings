@@ -1,5 +1,6 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getDatabase } from 'firebase-admin/database';
 
 if (!getApps().length) {
   try {
@@ -30,6 +31,7 @@ if (!getApps().length) {
     } else {
       initializeApp({
         credential: cert(credentialData),
+        databaseURL: "https://vsmresult-default-rtdb.asia-southeast1.firebasedatabase.app",
       });
     }
   } catch (error) {
@@ -38,3 +40,4 @@ if (!getApps().length) {
 }
 
 export const firestore = getFirestore();
+export const database = getDatabase();

@@ -2,8 +2,14 @@ import { categories } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
+import { getCurrentUserAction } from "@/app/actions";
+import { redirect } from "next/navigation";
 
-export default function CategoriesIndexPage() {
+export default async function CategoriesIndexPage() {
+  const user = await getCurrentUserAction();
+  if (!user) {
+    redirect("/");
+  }
   return (
     <div className="px-6 lg:px-12 max-w-[1600px] mx-auto w-full py-12 flex flex-col gap-12">
       <div className="flex flex-col items-center text-center max-w-3xl mx-auto mb-8">

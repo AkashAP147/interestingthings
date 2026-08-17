@@ -1,13 +1,13 @@
 import { Discovery } from '@/types';
-import { firestore } from './firebase';
+import { database } from './firebase';
 
 const COLLECTION = 'discoveries';
 
 export async function readDB(): Promise<Discovery[]> {
   try {
-    const snapshot = await firestore.collection(COLLECTION).get();
-    const discoveries: Discovery[] = [];
-    snapshot.forEach((doc) => discoveries.push(doc.data() as Discovery));
+    const snapshot = await database.ref('discoveries').once('value');
+    const data = snapshot.val() || {};
+    const discoveries = Object.keys(data).map(key => data[key] as Discovery);
     // Sort by createdAt descending
     return discoveries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
@@ -21,11 +21,11 @@ export async function writeDB(discoveries: Discovery[]): Promise<void> {
 }
 
 export async function addDiscovery(discovery: Discovery): Promise<boolean> {
-  const snapshot = await firestore.collection(COLLECTION).where('sourceUrl', '==', discovery.sourceUrl).limit(1).get();
-  if (!snapshot.empty) {
+  const snapshot = await database.ref('discoveries').orderByChild('sourceUrl').equalTo(discovery.sourceUrl).once('value');
+  if (snapshot.exists()) {
     return false; // Prevent duplicate
   }
-  await firestore.collection(COLLECTION).doc(discovery.id).set(discovery);
+  await database.ref(`discoveries/${discovery.id}`).set(discovery);
   return true;
 }
 
@@ -34,18 +34,17 @@ export async function updateDiscoveryStatus(id: string, status: 'published' | 'd
   if (status === 'published') {
     updateData.publishedAt = new Date().toISOString();
   }
-  await firestore.collection(COLLECTION).doc(id).update(updateData);
+  await database.ref(`discoveries/${id}`).update(updateData);
 }
 
 export async function getPendingDiscoveries(): Promise<Discovery[]> {
-  const snapshot = await firestore.collection(COLLECTION).where('status', '==', 'pending_approval').get();
-  const discoveries: Discovery[] = [];
-  snapshot.forEach((doc) => discoveries.push(doc.data() as Discovery));
-  return discoveries;
+  const snapshot = await database.ref('discoveries').orderByChild('status').equalTo('pending_approval').once('value');
+  const data = snapshot.val() || {};
+  return Object.keys(data).map(key => data[key] as Discovery);
 }
 
 export async function deleteDiscovery(id: string): Promise<void> {
-  await firestore.collection(COLLECTION).doc(id).delete();
+  await database.ref(`discoveries/${id}`).remove();
 }
 
 export interface ContactMessage {
@@ -59,10 +58,10 @@ export interface ContactMessage {
 
 export async function getContactMessages(): Promise<ContactMessage[]> {
   try {
-    const snapshot = await firestore.collection("messages").orderBy("createdAt", "desc").get();
-    const messages: ContactMessage[] = [];
-    snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() } as ContactMessage));
-    return messages;
+    const snapshot = await database.ref('contactMessages').once('value');
+    const data = snapshot.val() || {};
+    const messages = Object.keys(data).map(key => ({ id: key, ...data[key] } as ContactMessage));
+    return messages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
     console.error("Failed to read messages DB:", error);
     return [];
@@ -70,5 +69,5 @@ export async function getContactMessages(): Promise<ContactMessage[]> {
 }
 
 export async function markMessageRead(id: string): Promise<void> {
-  await firestore.collection("messages").doc(id).update({ status: 'read' });
+  await database.ref(`contactMessages/${id}`).update({ status: 'read' });
 }
