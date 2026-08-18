@@ -262,16 +262,32 @@ export default function MessagesPage() {
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeChatId) return;
     
+    if (file.type.startsWith("video/") && file.size > 5 * 1024 * 1024) {
+      alert("Videos must be smaller than 5MB to be encrypted and sent securely.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     setIsUploading(true);
     try {
-      const base64Image = await compressImage(file);
-      await sendOptimisticMessage("", base64Image);
+      let base64Media = "";
+      if (file.type.startsWith("image/")) {
+        base64Media = await compressImage(file);
+      } else {
+        base64Media = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+      await sendOptimisticMessage("", base64Media);
     } catch (err) {
-      console.error("Failed to process image");
+      console.error("Failed to process media");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -581,8 +597,12 @@ export default function MessagesPage() {
                       } ${msg.isPending ? 'opacity-70' : ''}`}>
                         {msg.imageUrl && !msg.isDeleted && (
                           <div className="mb-2 relative w-full overflow-hidden rounded-xl bg-black/10">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.imageUrl} alt="Shared image" className="max-w-full h-auto object-contain max-h-64" />
+                            {msg.imageUrl.startsWith("data:video/") || msg.imageUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
+                              <video src={msg.imageUrl} controls playsInline className="max-w-full h-auto max-h-64 rounded-xl" />
+                            ) : (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={msg.imageUrl} alt="Shared media" className="max-w-full h-auto object-contain max-h-64" />
+                            )}
                           </div>
                         )}
                         {msg.text && (
@@ -648,10 +668,10 @@ export default function MessagesPage() {
 
                   <input 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*,video/*" 
                     className="hidden" 
                     ref={fileInputRef}
-                    onChange={handleImageUpload}
+                    onChange={handleMediaUpload}
                   />
                   <button
                     type="button"
