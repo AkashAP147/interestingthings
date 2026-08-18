@@ -863,11 +863,21 @@ export async function getUserConnectionsAction(userId: string) {
 
   const followers = (await Promise.all(followersList.map(id => getUserById(id))))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
-    .map(u => ({ id: u.id, username: u.username, name: u.name, profilePicture: u.profilePicture }));
+    .map(u => ({ 
+      id: u.id, 
+      username: u.username || null, 
+      name: u.name || null, 
+      profilePicture: u.profilePicture || null 
+    }));
     
   const following = (await Promise.all(followingList.map(id => getUserById(id))))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
-    .map(u => ({ id: u.id, username: u.username, name: u.name, profilePicture: u.profilePicture }));
+    .map(u => ({ 
+      id: u.id, 
+      username: u.username || null, 
+      name: u.name || null, 
+      profilePicture: u.profilePicture || null 
+    }));
 
   return { success: true, followers, following };
 }

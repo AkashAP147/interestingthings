@@ -7,9 +7,9 @@ import Image from "next/image";
 
 type ConnectionUser = {
   id: string;
-  username?: string;
-  name?: string;
-  profilePicture?: string;
+  username?: string | null;
+  name?: string | null;
+  profilePicture?: string | null;
 };
 
 interface ProfileStatsModalProps {

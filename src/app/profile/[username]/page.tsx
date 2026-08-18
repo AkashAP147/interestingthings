@@ -54,7 +54,7 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
   const followerCount = followers.length;
   const followingCount = following.length;
   
-  const joinDate = new Date(targetUser.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const joinDate = new Date(targetUser.joinedAt || Date.now()).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   const postsRes = await getUserPostsAction(targetUser.id, currentUser?.id);
   const posts = postsRes.success ? postsRes.posts : [];
