@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X, Lock, Key } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateUserProfileAction, backupPrivateKeyAction } from "@/app/actions";
 import { encryptPrivateKeyWithPassword, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
+import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X, Lock, Key } from "lucide-react";
+import QRCode from "react-qr-code";
+import { useSearchParams } from "next/navigation";
 
 function E2EEManager({ user }: { user: any }) {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [msg, setMsg] = useState("");
+  const [showQR, setShowQR] = useState(false);
 
-  const hasLocalKey = typeof window !== 'undefined' ? !!localStorage.getItem(`privKey_${user.id}`) : false;
+  const privKey = typeof window !== 'undefined' ? localStorage.getItem(`privKey_${user.id}`) : null;
+  const hasLocalKey = !!privKey;
   const hasServerBackup = !!user.encryptedPrivateKey;
 
   const handleBackup = async () => {
@@ -59,15 +63,32 @@ function E2EEManager({ user }: { user: any }) {
 
   if (hasLocalKey && hasServerBackup) {
     return (
-      <div className="bg-green/10 text-green p-4 rounded-xl flex items-center gap-3 mt-8">
-        <Lock className="w-5 h-5" />
-        <span className="text-sm font-semibold">Your encryption key is securely backed up.</span>
+      <div className="bg-green/10 text-green p-4 rounded-xl flex flex-col gap-3 mt-8" id="e2ee-section">
+        <div className="flex items-center gap-3">
+          <Lock className="w-5 h-5" />
+          <span className="text-sm font-semibold">Your encryption key is securely backed up.</span>
+        </div>
+        <div className="border-t border-green/20 pt-3">
+          <button 
+            type="button"
+            onClick={() => setShowQR(!showQR)}
+            className="text-sm font-bold hover:underline"
+          >
+            {showQR ? "Hide Recovery QR Code" : "Show Recovery QR Code"}
+          </button>
+          {showQR && privKey && (
+            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit">
+              <QRCode value={privKey} size={200} />
+              <p className="text-[10px] text-center text-gray-500 mt-2">Screenshot & save this securely.</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-purple-light/10 p-4 sm:p-6 rounded-2xl border border-purple-light/30 flex flex-col gap-4 mt-8">
+    <div className="bg-purple-light/10 p-4 sm:p-6 rounded-2xl border border-purple-light/30 flex flex-col gap-4 mt-8" id="e2ee-section">
       <div className="flex items-center gap-2 text-navy-dark dark:text-white font-bold text-lg">
         <Key className="w-5 h-5 text-purple" />
         Encryption Key Management
@@ -80,6 +101,7 @@ function E2EEManager({ user }: { user: any }) {
       
       <div className="flex flex-col sm:flex-row gap-3">
         <input 
+          id="e2ee-password-input"
           type="password" 
           placeholder="Master Password" 
           value={password}
@@ -96,12 +118,31 @@ function E2EEManager({ user }: { user: any }) {
         </button>
       </div>
       {msg && <p className={`text-sm font-medium ${status === 'error' ? 'text-pink' : 'text-green'}`}>{msg}</p>}
+      
+      {hasLocalKey && (
+        <div className="border-t border-purple-light/20 pt-3 mt-2">
+          <button 
+            type="button"
+            onClick={() => setShowQR(!showQR)}
+            className="text-sm font-bold text-purple hover:underline"
+          >
+            {showQR ? "Hide Recovery QR Code" : "Show Recovery QR Code"}
+          </button>
+          {showQR && privKey && (
+            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit">
+              <QRCode value={privKey} size={200} />
+              <p className="text-[10px] text-center text-gray-500 mt-2">Screenshot & save this securely.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 export function ProfileForm() {
   const { user, refreshUser, logout } = useAuth();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -112,6 +153,18 @@ export function ProfileForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
+
+  useEffect(() => {
+    if (searchParams.get("edit") === "e2ee") {
+      setTimeout(() => {
+        const el = document.getElementById("e2ee-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          document.getElementById("e2ee-password-input")?.focus();
+        }
+      }, 500);
+    }
+  }, [searchParams]);
 
   // Handle file selection and resize via canvas
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

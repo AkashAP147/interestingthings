@@ -7,8 +7,9 @@ import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, M
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import EmojiPicker from 'emoji-picker-react';
+import { MediaPicker } from '@/components/MediaPicker';
 import { encryptPayload, decryptPayload } from "@/lib/e2ee";
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ export default function MessagesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [messageToDelete, setMessageToDelete] = useState<any>(null);
+  const [showScanner, setShowScanner] = useState(false);
   
   // WhatsApp features state
   const [pendingMessages, setPendingMessages] = useState<any[]>([]);
@@ -154,6 +156,31 @@ export default function MessagesPage() {
     const interval = setInterval(fetchMessages, 5000); // 5 seconds to save quota
     return () => clearInterval(interval);
   }, [activeChatId]);
+
+  useEffect(() => {
+    if (!showScanner || !user?.id) return;
+
+    const scanner = new Html5QrcodeScanner("reader", {
+      qrbox: { width: 250, height: 250 },
+      fps: 5,
+    }, false);
+
+    scanner.render(
+      (decodedText) => {
+        if (decodedText && decodedText.length > 50) {
+          localStorage.setItem(`privKey_${user.id}`, decodedText);
+          scanner.clear();
+          setShowScanner(false);
+          window.location.reload();
+        }
+      },
+      (err) => {}
+    );
+
+    return () => {
+      scanner.clear().catch(e => console.error("Failed to clear scanner", e));
+    };
+  }, [showScanner, user?.id]);
 
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,12 +357,27 @@ export default function MessagesPage() {
             <p className="text-gray-text mb-6">
               You are logging in from a new device. To read your encrypted messages, you must unlock your encryption key using your Master Password.
             </p>
-            <Link 
-              href="/profile"
-              className="inline-block w-full bg-purple text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-bright transition-colors"
-            >
-              Go to Profile to Unlock
-            </Link>
+            <p className="mt-8 text-sm text-gray-text">
+              Don't have a Master Password set yet?{" "}
+              <Link href="/profile?edit=e2ee" className="text-purple font-semibold hover:underline">
+                Go to Profile to add one
+              </Link>
+            </p>
+
+            <div className="mt-6 border-t border-purple-light/20 pt-6 w-full flex flex-col items-center">
+              <button
+                onClick={() => setShowScanner(!showScanner)}
+                className="text-sm font-semibold text-navy-dark dark:text-white hover:text-purple transition-colors"
+              >
+                {showScanner ? "Close Scanner" : "Scan Recovery QR Code"}
+              </button>
+              
+              {showScanner && (
+                <div className="mt-4 w-full max-w-sm bg-white dark:bg-navy-deep p-2 rounded-xl shadow-inner border border-purple-light/20 overflow-hidden relative">
+                  <div id="reader" className="w-full rounded-lg overflow-hidden [&_video]:w-full [&_video]:object-cover"></div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -454,7 +496,18 @@ export default function MessagesPage() {
                     <h3 className="font-semibold text-[16px] text-navy-dark dark:text-white flex items-center gap-2">
                       {activeChatOtherUser?.name || 'Chat'}
                     </h3>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-[-2px]">last seen recently</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-[-2px]">
+                      {(() => {
+                        if (!activeChatOtherUser?.lastActiveAt) return "last seen recently";
+                        const diffMins = Math.floor((Date.now() - new Date(activeChatOtherUser.lastActiveAt).getTime()) / 60000);
+                        if (diffMins < 5) return <span className="text-purple">online</span>;
+                        if (diffMins < 60) return `last seen ${diffMins} min${diffMins === 1 ? '' : 's'} ago`;
+                        const diffHrs = Math.floor(diffMins / 60);
+                        if (diffHrs < 24) return `last seen ${diffHrs} hr${diffHrs === 1 ? '' : 's'} ago`;
+                        if (diffHrs < 48) return "last seen yesterday";
+                        return `last seen ${Math.floor(diffHrs/24)} days ago`;
+                      })()}
+                    </p>
                   </div>
                 </Link>
               </div>
@@ -535,9 +588,12 @@ export default function MessagesPage() {
                     exit={{ opacity: 0, y: 20 }}
                     className="absolute bottom-full left-4 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border border-purple-light/20"
                   >
-                    <EmojiPicker 
-                      onEmojiClick={(emojiData) => setNewMessage(prev => prev + emojiData.emoji)}
-                      theme={'auto' as any}
+                    <MediaPicker 
+                      onEmojiClick={(emojiData: any) => setNewMessage(prev => prev + emojiData.emoji)}
+                      onGifClick={(gifUrl: string) => {
+                        setShowEmojiPicker(false);
+                        sendOptimisticMessage("", gifUrl);
+                      }}
                     />
                   </motion.div>
                 )}

@@ -21,6 +21,7 @@ export interface User {
   bio?: string;
   encryptedPrivateKey?: string; // stringified JSON object
   publicKey?: string;
+  lastActiveAt?: string;
 }
 
 const COLLECTION = 'users';

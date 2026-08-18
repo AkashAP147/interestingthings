@@ -246,10 +246,17 @@ export async function trackDailyActivityAction() {
 
   // Use local time for the streak to match user expectation, simplified to UTC for server
   // More complex apps might track timezone, but for this demo UTC is fine.
-  const today = new Date().toISOString().split("T")[0]; 
+  const now = new Date();
+  const today = now.toISOString().split("T")[0]; 
   const activityDates = user.activityDates || [];
+  
+  const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt).getTime() : 0;
+  const isStale = (now.getTime() - lastActive) > 5 * 60 * 1000; // 5 minutes
 
   if (activityDates.includes(today)) {
+    if (isStale) {
+      await updateUserProfile(userId, { lastActiveAt: now.toISOString() });
+    }
     return { success: true, updated: false }; 
   }
 
@@ -275,6 +282,7 @@ export async function trackDailyActivityAction() {
     activityDates: newActivityDates,
     streakCount,
     curiosityPoints,
+    lastActiveAt: now.toISOString()
   });
 
   return { success: true, updated: true };
