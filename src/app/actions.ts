@@ -2,12 +2,14 @@
 
 import { updateDiscoveryStatus, deleteDiscovery } from "@/lib/db";
 import { findOrCreateUser, verifyUser, toggleLike, getUserByIdentifier, isUsernameTaken, updateUserProfile } from "@/lib/user-db";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath, revalidateTag, updateTag } from "next/cache";
 import { cookies } from "next/headers";
+import { auth, database } from "@/lib/firebase";
+import crypto from "crypto";
 
 export async function approveDiscovery(id: string) {
   await updateDiscoveryStatus(id, "published");
-  updateTag("discoveries");
+  updateTag("discoveries-v2");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -16,8 +18,39 @@ export async function approveDiscovery(id: string) {
 
 export async function rejectDiscovery(id: string) {
   await deleteDiscovery(id);
-  updateTag("discoveries");
+  updateTag("discoveries-v2");
   revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function getTrendingDiscoveriesAction() {
+  const { getTrendingDiscoveries } = await import("@/lib/data");
+  return await getTrendingDiscoveries();
+}
+
+export async function getUserEncryptedPrivateKeyAction(uid: string) {
+  const { getUserByIdentifier } = await import("@/lib/user-db");
+  const userDb = await getUserByIdentifier(uid);
+  return userDb?.encryptedPrivateKey || null;
+}
+
+export async function getNotificationsAction() {
+  const { getNotifications } = await import("@/lib/user-db");
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false, notifications: [] };
+  
+  const notifications = await getNotifications(userId);
+  return { success: true, notifications };
+}
+
+export async function markNotificationsReadAction() {
+  const { markNotificationsRead } = await import("@/lib/user-db");
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false };
+  
+  await markNotificationsRead(userId);
   return { success: true };
 }
 
@@ -28,7 +61,7 @@ export async function getRandomDiscoveryAction() {
 
 export async function deleteDiscoveryAction(id: string) {
   await deleteDiscovery(id);
-  updateTag("discoveries");
+  updateTag("discoveries-v2");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -153,7 +186,7 @@ export async function manualAddDiscoveryAction(formData: FormData) {
     return { success: false, error: "This URL has already been added." };
   }
   
-  updateTag("discoveries");
+  updateTag("discoveries-v2");
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -565,14 +598,64 @@ export async function setPublicKeyAction(publicKey: string) {
   return { success: true };
 }
 
-export async function backupPrivateKeyAction(encryptedPrivateKeyStr: string) {
-  const cookieStore = await cookies();
-  const currentUserId = cookieStore.get("auth_user")?.value;
-  if (!currentUserId) return { success: false };
+export async function backupPrivateKeyAction(encryptedPrivateKey: string) {
+  const { updateUserProfile } = await import("@/lib/user-db");
+  const user = await getCurrentUserAction();
+  if (!user) return { success: false, error: "Not logged in" };
 
+  try {
+    await updateUserProfile(user.id, { encryptedPrivateKey });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function generateRecoverySessionAction(masterPassword: string) {
+  const { database, auth } = await import("@/lib/firebase");
+  const user = await getCurrentUserAction();
+  if (!user) return { success: false, error: "Not logged in" };
+
+  try {
+    const customToken = await auth.createCustomToken(user.id);
+    const uuid = crypto.randomUUID();
+    
+    // Save session in RTDB with a 5-minute expiration
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+    await database.ref(`recoverySessions/${uuid}`).set({
+      token: customToken,
+      masterPassword,
+      expiresAt
+    });
+    
+    return { success: true, uuid };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function consumeRecoverySessionAction(uuid: string) {
   const { database } = await import("@/lib/firebase");
-  await database.ref(`users/${currentUserId}/encryptedPrivateKey`).set(encryptedPrivateKeyStr);
-  return { success: true };
+  try {
+    const ref = database.ref(`recoverySessions/${uuid}`);
+    const snapshot = await ref.once('value');
+    const session = snapshot.val();
+    
+    if (!session) {
+      return { success: false, error: "Invalid or expired session" };
+    }
+    
+    // Immediately delete the session so it can only be used once
+    await ref.remove();
+    
+    if (Date.now() > session.expiresAt) {
+      return { success: false, error: "Session expired" };
+    }
+    
+    return { success: true, token: session.token, masterPassword: session.masterPassword };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
 export async function createPostAction(formData: FormData) {
@@ -595,7 +678,7 @@ export async function createPostAction(formData: FormData) {
     caption: caption.trim(),
     visibility,
     createdAt: new Date().toISOString(),
-    likes: 0
+    likedBy: []
   };
 
   await database.ref(`posts/${currentUserId}`).push(newPost);
@@ -643,6 +726,150 @@ export async function getUserPostsAction(targetUserId: string, viewerId?: string
   }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   
   return { success: true, posts };
+}
+
+export async function togglePostLikeAction(authorId: string, postId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  const { createNotification } = await import("@/lib/user-db");
+
+  const postRef = database.ref(`posts/${authorId}/${postId}`);
+  
+  let isLiked = false;
+  await postRef.transaction((post) => {
+    if (post) {
+      if (!post.likedBy) post.likedBy = [];
+      const index = post.likedBy.indexOf(currentUserId);
+      if (index === -1) {
+        post.likedBy.push(currentUserId);
+        isLiked = true;
+      } else {
+        post.likedBy.splice(index, 1);
+        isLiked = false;
+      }
+    }
+    return post;
+  });
+
+  // Create notification if liked and not liking own post
+  if (isLiked && authorId !== currentUserId) {
+    await createNotification({
+      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: authorId,
+      actorId: currentUserId,
+      type: 'like',
+      read: false,
+      createdAt: new Date().toISOString(),
+      discoveryId: postId // Reusing discoveryId field for post ID
+    });
+  }
+
+  revalidatePath("/profile");
+  return { success: true, liked: isLiked };
+}
+
+export async function addPostCommentAction(authorId: string, postId: string, text: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  if (!text.trim()) return { success: false, error: "Comment cannot be empty" };
+
+  const { database } = await import("@/lib/firebase");
+  
+  const newComment = {
+    userId: currentUserId,
+    text: text.trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  await database.ref(`post_comments/${postId}`).push(newComment);
+
+  return { success: true };
+}
+
+export async function getPostCommentsAction(postId: string) {
+  const { database } = await import("@/lib/firebase");
+  const { getUserById } = await import("@/lib/user-db");
+
+  const commentsSnap = await database.ref(`post_comments/${postId}`).once('value');
+  const commentsData = commentsSnap.val();
+  
+  if (!commentsData) return { success: true, comments: [] };
+
+  const comments = await Promise.all(
+    Object.keys(commentsData).map(async (key) => {
+      const comment = commentsData[key];
+      const user = await getUserById(comment.userId);
+      return {
+        id: key,
+        ...comment,
+        user: user ? {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          profilePicture: user.profilePicture
+        } : null
+      };
+    })
+  );
+
+  return { success: true, comments: comments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) };
+}
+
+export async function sharePostToFollowersAction(authorId: string, postId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { getUserById } = await import("@/lib/user-db");
+  const { database } = await import("@/lib/firebase");
+  const { startChatAction, sendMessageAction } = await import("@/app/actions");
+
+  const currentUser = await getUserById(currentUserId);
+  if (!currentUser || !currentUser.followers || currentUser.followers.length === 0) {
+    return { success: false, error: "No followers to share with" };
+  }
+
+  // Determine post link (or format)
+  const postLinkMessage = `Check out this post: /profile/${authorId}?post=${postId}`;
+
+  // For each follower, ensure a chat exists and send a message
+  for (const followerId of currentUser.followers) {
+    const follower = await getUserById(followerId);
+    if (!follower) continue;
+    
+    // Attempt to start/get chat
+    const chatRes = await startChatAction(follower.username || follower.id);
+    if (chatRes.success && chatRes.chatId) {
+      await sendMessageAction(chatRes.chatId, postLinkMessage, undefined);
+    }
+  }
+
+  return { success: true, sharedCount: currentUser.followers.length };
+}
+
+export async function getUserConnectionsAction(userId: string) {
+  const { getUserById } = await import("@/lib/user-db");
+  
+  const user = await getUserById(userId);
+  if (!user) return { success: false, error: "User not found" };
+
+  const followersList = user.followers || [];
+  const followingList = user.following || [];
+
+  const followers = (await Promise.all(followersList.map(id => getUserById(id))))
+    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+    .map(u => ({ id: u.id, username: u.username, name: u.name, profilePicture: u.profilePicture }));
+    
+  const following = (await Promise.all(followingList.map(id => getUserById(id))))
+    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+    .map(u => ({ id: u.id, username: u.username, name: u.name, profilePicture: u.profilePicture }));
+
+  return { success: true, followers, following };
 }
 
 export async function searchUsersAction(query: string) {

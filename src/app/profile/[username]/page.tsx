@@ -1,5 +1,5 @@
 import { getUserByIdentifier } from "@/lib/user-db";
-import { getCurrentUserAction } from "@/app/actions";
+import { getCurrentUserAction, getUserConnectionsAction } from "@/app/actions";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import FollowButton from "@/components/profile/FollowButton";
@@ -7,6 +7,7 @@ import Link from "next/link";
 import { getUserPostsAction } from "@/app/actions";
 import { User as UserIcon, Calendar, Activity, Star } from "lucide-react";
 import { GalleryTab } from "@/components/GalleryTab";
+import ProfileStatsModal from "@/components/profile/ProfileStatsModal";
 
 export async function generateMetadata(props: { params: Promise<{ username: string }> }) {
   const params = await props.params;
@@ -44,9 +45,15 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
   
   const isOwnProfile = currentUser?.id === targetUser.id;
   const isFollowing = currentUser?.following?.includes(targetUser.id) || false;
+  const isFollower = targetUser.followers?.includes(currentUser?.id || "") || false;
   
-  const followerCount = targetUser.followers?.length || 0;
-  const followingCount = targetUser.following?.length || 0;
+  // Fetch full user objects for connections
+  const { followers = [], following = [] } = await getUserConnectionsAction(targetUser.id);
+  const friends = followers.filter(f => following.some(fw => fw.id === f.id));
+  
+  const followerCount = followers.length;
+  const followingCount = following.length;
+  
   const joinDate = new Date(targetUser.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   const postsRes = await getUserPostsAction(targetUser.id, currentUser?.id);
@@ -81,7 +88,15 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
                   Edit Profile
                 </Link>
               ) : currentUser ? (
-                <FollowButton targetUserId={targetUser.id} initialIsFollowing={isFollowing} />
+                <>
+                  <FollowButton targetUserId={targetUser.id} initialIsFollowing={isFollowing} isFollower={isFollower} />
+                  <Link 
+                    href={`/messages?user=${targetUser.username || targetUser.id}`}
+                    className="px-6 py-2.5 rounded-full font-semibold bg-white text-purple border border-purple hover:bg-purple-light/10 transition-colors shadow-sm flex items-center justify-center"
+                  >
+                    Message
+                  </Link>
+                </>
               ) : (
                 <Link 
                   href={`/login?redirect=/profile/${username}`}
@@ -106,6 +121,21 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
             {targetUser.username && (
               <p className="text-purple font-medium text-lg">@{targetUser.username}</p>
             )}
+            
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-sm font-semibold text-orange bg-orange/10 px-3 py-1 rounded-full animate-in slide-in-from-bottom-2 fade-in duration-500">
+                {targetUser.curiosityPoints || 0} Curiosity Points
+              </span>
+            </div>
+
+            <ProfileStatsModal 
+              followers={followers} 
+              following={following} 
+              friends={friends} 
+              followerCount={followerCount} 
+              followingCount={followingCount} 
+              compact={true}
+            />
 
             {targetUser.bio && (
               <p className="text-sm text-navy-dark/80 dark:text-white/80 mt-4 max-w-lg leading-relaxed">
@@ -122,29 +152,6 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
                 <Activity className="w-4 h-4" />
                 {targetUser.streakCount || 0} Day Streak
               </div>
-            </div>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50 dark:bg-navy-deep rounded-2xl border border-purple-light/10">
-            <div className="text-center">
-              <p className="text-gray-text text-sm font-medium mb-1">Followers</p>
-              <p className="text-2xl font-bold text-navy-dark dark:text-white">{followerCount}</p>
-            </div>
-            <div className="text-center border-l border-purple-light/10">
-              <p className="text-gray-text text-sm font-medium mb-1">Following</p>
-              <p className="text-2xl font-bold text-navy-dark dark:text-white">{followingCount}</p>
-            </div>
-            <div className="text-center border-l border-purple-light/10">
-              <p className="text-gray-text text-sm font-medium mb-1">Curiosity Points</p>
-              <div className="flex items-center justify-center gap-1 text-2xl font-bold text-orange-400">
-                <Star className="w-5 h-5 fill-current" />
-                {targetUser.curiosityPoints || 0}
-              </div>
-            </div>
-            <div className="text-center border-l border-purple-light/10">
-              <p className="text-gray-text text-sm font-medium mb-1">Saved Posts</p>
-              <p className="text-2xl font-bold text-navy-dark dark:text-white">{targetUser.likes?.length || 0}</p>
             </div>
           </div>
 

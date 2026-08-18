@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { createPostAction, updatePostVisibilityAction } from "@/app/actions";
-import { Plus, Image as ImageIcon, Loader2, X, User as UserIcon } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { createPostAction, updatePostVisibilityAction, togglePostLikeAction, addPostCommentAction, getPostCommentsAction, sharePostToFollowersAction } from "@/app/actions";
+import { Plus, Image as ImageIcon, Loader2, X, User as UserIcon, Heart, MessageCircle, Share2, Send } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Post {
   id: string;
@@ -10,10 +11,12 @@ interface Post {
   caption: string;
   visibility: "public" | "private" | "friends";
   createdAt: string;
-  likes: number;
+  userId?: string;
+  likedBy?: string[];
 }
 
 export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: Post[], readOnly?: boolean }) {
+  const { user } = useAuth();
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [isUploading, setIsUploading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -25,6 +28,27 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
   // Post Viewer state
   const [viewingPost, setViewingPost] = useState<Post | null>(null);
   const [viewerSlideIndex, setViewerSlideIndex] = useState(0);
+  
+  // Social state
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isLiking, setIsLiking] = useState(false);
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+
+  useEffect(() => {
+    if (viewingPost) {
+      setIsLoadingComments(true);
+      getPostCommentsAction(viewingPost.id).then(res => {
+        if (res.success && res.comments) {
+          setComments(res.comments);
+        }
+      }).finally(() => {
+        setIsLoadingComments(false);
+      });
+    }
+  }, [viewingPost?.id]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,7 +116,7 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
           caption,
           visibility,
           createdAt: new Date().toISOString(),
-          likes: 0
+          likedBy: []
         };
         setPosts([newPost, ...posts]);
         setShowModal(false);
@@ -104,6 +128,83 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
       console.error("Failed to post", err);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleLike = async (post: Post) => {
+    if (!user || isLiking) return;
+    setIsLiking(true);
+    
+    // Optimistic update
+    const isLiked = post.likedBy?.includes(user.id);
+    const newLikedBy = isLiked 
+      ? (post.likedBy || []).filter(id => id !== user.id)
+      : [...(post.likedBy || []), user.id];
+      
+    setPosts(posts.map(p => p.id === post.id ? { ...p, likedBy: newLikedBy } : p));
+    if (viewingPost?.id === post.id) {
+      setViewingPost({ ...viewingPost, likedBy: newLikedBy });
+    }
+
+    try {
+      await togglePostLikeAction(post.userId || user.id, post.id);
+    } catch (e) {
+      // Revert on error
+      setPosts(posts.map(p => p.id === post.id ? post : p));
+      if (viewingPost?.id === post.id) setViewingPost(post);
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !viewingPost || !newComment.trim() || isCommenting) return;
+    
+    setIsCommenting(true);
+    const text = newComment;
+    setNewComment("");
+    
+    // Optimistic update
+    const tempComment = {
+      id: `temp-${Date.now()}`,
+      userId: user.id,
+      text,
+      createdAt: new Date().toISOString(),
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        profilePicture: user.profilePicture
+      }
+    };
+    setComments([...comments, tempComment]);
+
+    try {
+      await addPostCommentAction(viewingPost.userId || user.id, viewingPost.id, text);
+    } catch (e) {
+      setComments(comments.filter(c => c.id !== tempComment.id));
+    } finally {
+      setIsCommenting(false);
+    }
+  };
+
+  const handleShare = async (post: Post) => {
+    if (!user || isSharing) return;
+    if (confirm("Share this post to all your followers via direct message?")) {
+      setIsSharing(true);
+      try {
+        const res = await sharePostToFollowersAction(post.userId || user.id, post.id);
+        if (res.success) {
+          alert(`Shared to ${res.sharedCount} followers!`);
+        } else {
+          alert(res.error || "Failed to share post");
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsSharing(false);
+      }
     }
   };
 
@@ -344,13 +445,104 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
                 )}
                 
                 {viewingPost.caption ? (
-                  <p className="text-navy-dark dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-navy-dark dark:text-gray-300 leading-relaxed whitespace-pre-wrap pb-4 border-b border-gray-100 dark:border-navy-dark">
                     {viewingPost.caption}
                   </p>
                 ) : (
-                  <p className="text-gray-400 italic">No caption provided.</p>
+                  <p className="text-gray-400 italic pb-4 border-b border-gray-100 dark:border-navy-dark">No caption provided.</p>
                 )}
+
+                {/* Interactions */}
+                {user && (
+                  <div className="flex items-center gap-6 py-4 border-b border-gray-100 dark:border-navy-dark">
+                    <button 
+                      onClick={() => handleLike(viewingPost)}
+                      disabled={isLiking}
+                      className="flex items-center gap-2 group transition-colors"
+                    >
+                      <Heart className={`w-6 h-6 ${viewingPost.likedBy?.includes(user.id) ? 'fill-pink text-pink' : 'text-gray-text group-hover:text-pink'}`} />
+                      <span className={`font-semibold ${viewingPost.likedBy?.includes(user.id) ? 'text-pink' : 'text-gray-text group-hover:text-pink'}`}>
+                        {viewingPost.likedBy?.length || 0}
+                      </span>
+                    </button>
+                    <button 
+                      className="flex items-center gap-2 group transition-colors"
+                    >
+                      <MessageCircle className="w-6 h-6 text-gray-text group-hover:text-blue" />
+                      <span className="font-semibold text-gray-text group-hover:text-blue">
+                        {comments.length}
+                      </span>
+                    </button>
+                    <button 
+                      onClick={() => handleShare(viewingPost)}
+                      disabled={isSharing}
+                      className="flex items-center gap-2 group transition-colors ml-auto"
+                    >
+                      <Share2 className="w-5 h-5 text-gray-text group-hover:text-purple" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Comments Section */}
+                <div className="py-4">
+                  <h4 className="font-bold text-navy-dark dark:text-white mb-4">Comments</h4>
+                  <div className="space-y-4 mb-4">
+                    {isLoadingComments ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-purple" />
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-4">No comments yet. Be the first!</p>
+                    ) : (
+                      comments.map(comment => (
+                        <div key={comment.id} className="flex gap-3">
+                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple to-pink flex items-center justify-center text-white shrink-0 overflow-hidden">
+                            {comment.user?.profilePicture ? (
+                              <img src={comment.user.profilePicture} alt="User" className="w-full h-full object-cover" />
+                            ) : (
+                              <UserIcon className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="flex-1 bg-gray-50 dark:bg-navy-dark/50 rounded-2xl rounded-tl-none p-3">
+                            <div className="flex items-baseline justify-between gap-2 mb-1">
+                              <span className="font-bold text-sm text-navy-dark dark:text-white">
+                                {comment.user?.username || comment.user?.name || "User"}
+                              </span>
+                              <span className="text-[10px] text-gray-400">
+                                {new Date(comment.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-text">{comment.text}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
+              
+              {/* Add Comment Input */}
+              {user && (
+                <div className="p-4 border-t border-gray-200 dark:border-navy-dark bg-gray-50 dark:bg-navy-deep">
+                  <form onSubmit={handleAddComment} className="relative">
+                    <input 
+                      type="text" 
+                      value={newComment}
+                      onChange={e => setNewComment(e.target.value)}
+                      placeholder="Add a comment..."
+                      className="w-full bg-white dark:bg-navy-dark border border-gray-200 dark:border-gray-700 rounded-full py-2.5 pl-4 pr-12 text-sm text-navy-dark dark:text-white focus:outline-none focus:border-purple focus:ring-1 focus:ring-purple transition-colors"
+                      disabled={isCommenting}
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!newComment.trim() || isCommenting}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-white bg-purple rounded-full disabled:opacity-50 hover:bg-purple-bright transition-colors"
+                    >
+                      {isCommenting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           </div>
         </div>

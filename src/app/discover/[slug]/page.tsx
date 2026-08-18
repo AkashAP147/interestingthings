@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Heart, Share, ArrowLeft, ExternalLink } from "lucide-react";
 import { getDiscoveryBySlug, getDiscoveriesByCategory } from "@/lib/data";
+import { incrementDiscoveryViews } from "@/lib/db";
 import { categories } from "@/lib/categories";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -46,6 +47,8 @@ export default async function DiscoveryDetailPage({
   if (!discovery) {
     notFound();
   }
+
+  await incrementDiscoveryViews(discovery.id);
 
   const category = categories.find((c) => c.id === discovery.categoryId);
   const related = (await getDiscoveriesByCategory(discovery.categoryId))

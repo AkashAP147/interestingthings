@@ -6,10 +6,12 @@ import { Loader2, UserPlus, UserMinus } from "lucide-react";
 
 export default function FollowButton({ 
   targetUserId, 
-  initialIsFollowing 
+  initialIsFollowing,
+  isFollower = false
 }: { 
   targetUserId: string; 
   initialIsFollowing: boolean;
+  isFollower?: boolean;
 }) {
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +49,11 @@ export default function FollowButton({
         <>
           <UserMinus className="h-4 w-4 mr-2" />
           Following
+        </>
+      ) : isFollower ? (
+        <>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Follow Back
         </>
       ) : (
         <>

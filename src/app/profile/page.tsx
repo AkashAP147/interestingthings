@@ -1,11 +1,11 @@
 import { Flame, FolderHeart, Bookmark, Settings, User as UserIcon, Shield } from "lucide-react";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { readDB } from "@/lib/db";
-import { getCurrentUserAction } from "@/app/actions";
+import { getCurrentUserAction, getUserConnectionsAction, getUserPostsAction } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { EditProfileModal } from "@/components/EditProfileModal";
 import { GalleryTab } from "@/components/GalleryTab";
-import { getUserPostsAction } from "@/app/actions";
+import ProfileStatsModal from "@/components/profile/ProfileStatsModal";
 import Link from "next/link";
 import { Image as ImageIcon } from "lucide-react";
 
@@ -32,6 +32,12 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
 
   const activityDates = user.activityDates || [];
   const streakCount = user.streakCount || 0;
+  // Fetch full user objects for connections
+  const { followers = [], following = [] } = await getUserConnectionsAction(user.id);
+  const friends = followers.filter((f: any) => following.some((fw: any) => fw.id === f.id));
+  
+  const followerCount = followers.length;
+  const followingCount = following.length;
   
   // Get current week's dates (Mon - Sun)
   const todayDate = new Date();
@@ -66,6 +72,14 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
                 {user.curiosityPoints || 0} Curiosity Points
               </span>
             </div>
+            <ProfileStatsModal 
+              followers={followers} 
+              following={following} 
+              friends={friends} 
+              followerCount={followerCount} 
+              followingCount={followingCount} 
+              compact={true}
+            />
             {user.bio && (
               <p className="text-sm text-navy-dark/80 dark:text-white/80 mt-4 max-w-md leading-relaxed">
                 {user.bio}

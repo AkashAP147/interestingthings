@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Loader2, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { X, Sparkles, Loader2, ArrowRight, Eye, EyeOff, Camera } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { setUsernameAction, resolveUsernameToEmailAction } from "@/app/actions";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { setUsernameAction, resolveUsernameToEmailAction, consumeRecoverySessionAction, getUserEncryptedPrivateKeyAction } from "@/app/actions";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
+import { decryptPrivateKeyWithPassword } from "@/lib/e2ee";
+import { Html5Qrcode } from 'html5-qrcode';
 import { cn } from "@/lib/utils";
 
 export function AuthModal() {
@@ -22,6 +24,69 @@ export function AuthModal() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [useScanner, setUseScanner] = useState(false);
+
+  useEffect(() => {
+    if (!useScanner) return;
+
+    const html5QrCode = new Html5Qrcode("auth-reader");
+    
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        if (decodedText && decodedText.startsWith("REC:")) {
+          const uuid = decodedText.split(":")[1];
+          if (uuid) {
+            html5QrCode.stop().then(async () => {
+              setIsSubmitting(true);
+              try {
+                const res = await consumeRecoverySessionAction(uuid);
+                if (res.success && res.token && res.masterPassword) {
+                  const userCredential = await signInWithCustomToken(auth, res.token);
+                  
+                  // decrypt key logic
+                  const token = await userCredential.user.getIdToken(true);
+                  const { syncAuthTokenAction } = await import("@/app/actions");
+                  await syncAuthTokenAction(token);
+
+                  // we need to wait a tiny bit for the auth state to settle
+                  setTimeout(async () => {
+                    const encryptedPrivateKey = await getUserEncryptedPrivateKeyAction(userCredential.user.uid);
+                    if (encryptedPrivateKey) {
+                      const payload = JSON.parse(encryptedPrivateKey);
+                      const dec = await decryptPrivateKeyWithPassword(payload, res.masterPassword);
+                      if (dec) {
+                        localStorage.setItem(`privKey_${userCredential.user.uid}`, dec);
+                      }
+                    }
+                    window.location.reload();
+                  }, 1000);
+                  
+                } else {
+                  setError(res.error || "Failed to link device.");
+                  setIsSubmitting(false);
+                }
+              } catch(e: any) {
+                setError(e.message);
+                setIsSubmitting(false);
+              }
+            });
+          }
+        }
+      },
+      () => {}
+    ).catch((err) => {
+      console.error("Camera start failed:", err);
+      setError("Failed to start camera. Please check permissions.");
+    });
+
+    return () => {
+      if (html5QrCode.isScanning) {
+        html5QrCode.stop().catch(console.error);
+      }
+    };
+  }, [useScanner]);
 
   // Sync isSignUp when modalMode changes
   useEffect(() => {
@@ -200,7 +265,14 @@ export function AuthModal() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {useScanner ? (
+            <div className="flex flex-col items-center gap-4">
+              <div id="auth-reader" className="w-full max-w-[300px] overflow-hidden rounded-xl border border-purple-light/20 bg-black"></div>
+              {error && <p className="text-pink text-sm font-semibold">{error}</p>}
+              {isSubmitting && <p className="text-purple text-sm font-semibold flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Linking Device...</p>}
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {step === 2 ? (
               <div>
                 <label className="sr-only">Username</label>
@@ -285,6 +357,7 @@ export function AuthModal() {
               {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <>{step === 2 ? "Finish Setup" : (isSignUp ? "Create Account" : "Log In")} <ArrowRight className="h-4 w-4" /></>}
             </button>
           </form>
+          )}
 
           {!isSignUp && step === 1 && (
             <div className="mt-4 text-center">
@@ -309,6 +382,21 @@ export function AuthModal() {
                 className="text-purple font-semibold hover:underline"
               >
                 {isSignUp ? "Log In" : "Sign Up"}
+              </button>
+            </div>
+          )}
+
+          {step === 1 && !isSignUp && (
+            <div className="mt-4 pt-4 border-t border-purple-light/20 text-center text-sm">
+              <button 
+                onClick={() => {
+                  setUseScanner(!useScanner);
+                  setError("");
+                }} 
+                className="text-purple font-semibold flex items-center justify-center w-full gap-2 hover:bg-purple-light/10 py-2 rounded-lg transition-colors"
+              >
+                <Camera className="w-4 h-4" />
+                {useScanner ? "Use Email & Password" : "Link Device via QR Code"}
               </button>
             </div>
           )}

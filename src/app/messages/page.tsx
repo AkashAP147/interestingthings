@@ -7,12 +7,14 @@ import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, M
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { MediaPicker } from '@/components/MediaPicker';
 import { encryptPayload, decryptPayload, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [chats, setChats] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       const cached = sessionStorage.getItem('timit_chats');
@@ -97,6 +99,18 @@ export default function MessagesPage() {
             if (decryptedChats.length > 0) {
               await markChatsDeliveredAction(decryptedChats.map(c => c.id));
             }
+            
+            // Handle ?user query parameter only once on initial load
+            const targetUsername = searchParams?.get("user");
+            if (targetUsername && !activeChatId) {
+                const existingChat = decryptedChats.find((c: any) => c.otherUser.username === targetUsername || c.otherUser.id === targetUsername);
+                if (existingChat) {
+                    setActiveChatId(existingChat.id);
+                    setChatUsers(prev => ({ ...prev, [existingChat.id]: existingChat.otherUser }));
+                } else {
+                    handleStartChatDirect(targetUsername);
+                }
+            }
         }
       } catch (e) {
         console.error("Failed to fetch chats");
@@ -160,15 +174,14 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!showScanner || !user?.id) return;
 
-    const scanner = new Html5QrcodeScanner("reader", {
-      qrbox: { width: 250, height: 250 },
-      fps: 5,
-      videoConstraints: {
-        facingMode: "environment"
-      }
-    }, false);
-
-    scanner.render(
+    const html5QrCode = new Html5Qrcode("reader");
+    
+    html5QrCode.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
       (decodedText) => {
         if (decodedText && decodedText.startsWith("REC:")) {
           const parts = decodedText.split(":");
@@ -180,9 +193,10 @@ export default function MessagesPage() {
                 decryptPrivateKeyWithPassword(payload, scannedPwd).then(res => {
                   if (res) {
                     localStorage.setItem(`privKey_${user.id}`, res);
-                    scanner.clear();
-                    setShowScanner(false);
-                    window.location.reload();
+                    html5QrCode.stop().then(() => {
+                      setShowScanner(false);
+                      window.location.reload();
+                    });
                   } else {
                     alert("Invalid Master Password in QR Code.");
                   }
@@ -190,35 +204,49 @@ export default function MessagesPage() {
               } catch(e) {
                 console.error(e);
               }
+            } else {
+              alert("Your account does not have an encrypted backup.");
             }
           } else {
             alert("This QR Code does not match your account.");
           }
         } else if (decodedText && decodedText.length > 50) {
-          // Legacy support for raw private key QR
           localStorage.setItem(`privKey_${user.id}`, decodedText);
-          scanner.clear();
-          setShowScanner(false);
-          window.location.reload();
+          html5QrCode.stop().then(() => {
+            setShowScanner(false);
+            window.location.reload();
+          });
         }
       },
-      (err) => {}
-    );
+      (errorMessage) => {
+        // parse errors are normal while scanning, ignore
+      }
+    ).catch((err) => {
+      console.error("Camera start failed:", err);
+      alert("Failed to start camera. Please check permissions.");
+    });
 
     return () => {
-      scanner.clear().catch(e => console.error("Failed to clear scanner", e));
+      if (html5QrCode.isScanning) {
+        html5QrCode.stop().catch(console.error);
+      }
     };
   }, [showScanner, user?.id]);
 
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchUsername.trim()) return;
+    await handleStartChatDirect();
+  };
+
+  const handleStartChatDirect = async (targetUserOverride?: string) => {
+    const target = targetUserOverride || searchUsername;
+    if (!target) return;
     
     setIsSearching(true);
     setSearchError("");
     
     try {
-      const res = await startChatAction(searchUsername);
+      const res = await startChatAction(target);
       if (res.success && res.chatId) {
         setActiveChatId(res.chatId);
         setSearchUsername("");

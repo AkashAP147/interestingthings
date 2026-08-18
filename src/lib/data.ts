@@ -10,8 +10,8 @@ export const getDailyDiscoveries = unstable_cache(
     const shuffled = published.sort(() => 0.5 - Math.random());
     return shuffled.slice(0, 5);
   },
-  ['daily-discoveries'],
-  { revalidate: 3600, tags: ['discoveries'] }
+  ['daily-discoveries-v2'],
+  { revalidate: 3600, tags: ['discoveries-v2'] }
 );
 
 export const getAllDiscoveries = unstable_cache(
@@ -19,8 +19,8 @@ export const getAllDiscoveries = unstable_cache(
     const all = await readDB();
     return all.filter(d => d.status === "published");
   },
-  ['all-discoveries'],
-  { revalidate: 3600, tags: ['discoveries'] }
+  ['all-discoveries-v2'],
+  { revalidate: 3600, tags: ['discoveries-v2'] }
 );
 
 export const getDiscoveryBySlug = unstable_cache(
@@ -28,8 +28,8 @@ export const getDiscoveryBySlug = unstable_cache(
     const all = await readDB();
     return all.find(d => d.slug === slug);
   },
-  ['discovery-by-slug'],
-  { revalidate: 3600, tags: ['discoveries'] }
+  ['discovery-by-slug-v2'],
+  { revalidate: 3600, tags: ['discoveries-v2'] }
 );
 
 export const getDiscoveriesByCategory = unstable_cache(
@@ -37,8 +37,8 @@ export const getDiscoveriesByCategory = unstable_cache(
     const all = await readDB();
     return all.filter(d => d.categoryId === categoryId && d.status === "published");
   },
-  ['discoveries-by-category'],
-  { revalidate: 3600, tags: ['discoveries'] }
+  ['discoveries-by-category-v2'],
+  { revalidate: 3600, tags: ['discoveries-v2'] }
 );
 
 export const getTrendingDiscoveries = unstable_cache(
@@ -46,8 +46,8 @@ export const getTrendingDiscoveries = unstable_cache(
     const all = await readDB();
     return all.filter(d => d.status === "published").sort((a, b) => b.views - a.views).slice(0, 5);
   },
-  ['trending-discoveries'],
-  { revalidate: 3600, tags: ['discoveries'] }
+  ['trending-discoveries-v2'],
+  { revalidate: 3600, tags: ['discoveries-v2'] }
 );
 
 export const getRandomDiscovery = async (): Promise<Discovery | null> => {

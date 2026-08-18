@@ -24,6 +24,16 @@ export interface User {
   lastActiveAt?: string;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  actorId: string;
+  type: 'follow' | 'like';
+  read: boolean;
+  createdAt: string;
+  discoveryId?: string;
+}
+
 const COLLECTION = 'users';
 
 export async function readUsersDB(): Promise<User[]> {
@@ -209,6 +219,23 @@ export async function toggleLike(userId: string, discoveryId: string): Promise<{
       });
     }
     
+    if (finalUser && liked) {
+      // Create notification for the discovery owner
+      const discoverySnap = await database.ref(`discoveries/${discoveryId}`).once('value');
+      const discovery = discoverySnap.val();
+      if (discovery && discovery.authorId && discovery.authorId !== userId) {
+        await createNotification({
+          id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          userId: discovery.authorId,
+          actorId: userId,
+          type: 'like',
+          read: false,
+          createdAt: new Date().toISOString(),
+          discoveryId
+        });
+      }
+    }
+    
     return { liked, user: finalUser };
   } catch (error) {
     console.error("Like transaction failed: ", error);
@@ -253,9 +280,56 @@ export async function toggleFollow(currentUserId: string, targetUserId: string):
       return user;
     });
 
+    if (isFollowing) {
+      await createNotification({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId: targetUserId,
+        actorId: currentUserId,
+        type: 'follow',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+    }
+
     return { following: isFollowing };
   } catch (error) {
     console.error("Follow transaction failed: ", error);
     return { following: false };
+  }
+}
+
+export async function createNotification(notification: Notification): Promise<void> {
+  await database.ref(`notifications/${notification.userId}/${notification.id}`).set(notification);
+}
+
+export async function getNotifications(userId: string): Promise<Notification[]> {
+  try {
+    const snapshot = await database.ref(`notifications/${userId}`).orderByChild('createdAt').once('value');
+    const data = snapshot.val();
+    if (!data) return [];
+    
+    // Convert to array and sort descending
+    return Object.values(data).sort((a: any, b: any) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ) as Notification[];
+  } catch (error) {
+    console.error("Failed to get notifications", error);
+    return [];
+  }
+}
+
+export async function markNotificationsRead(userId: string): Promise<void> {
+  try {
+    const snapshot = await database.ref(`notifications/${userId}`).orderByChild('read').equalTo(false).once('value');
+    const unread = snapshot.val();
+    if (!unread) return;
+
+    const updates: any = {};
+    for (const key of Object.keys(unread)) {
+      updates[`${key}/read`] = true;
+    }
+    await database.ref(`notifications/${userId}`).update(updates);
+  } catch (error) {
+    console.error("Failed to mark notifications read", error);
   }
 }

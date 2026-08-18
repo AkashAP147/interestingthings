@@ -60,6 +60,13 @@ export async function deleteDiscovery(id: string): Promise<void> {
   await database.ref(`discoveries/${id}`).remove();
 }
 
+export async function incrementDiscoveryViews(id: string): Promise<void> {
+  const ref = database.ref(`discoveries/${id}/views`);
+  await ref.transaction((currentViews) => {
+    return (currentViews || 0) + 1;
+  });
+}
+
 export interface ContactMessage {
   id: string;
   name: string;

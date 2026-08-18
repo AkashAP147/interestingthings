@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { updateUserProfileAction, backupPrivateKeyAction } from "@/app/actions";
+import { updateUserProfileAction, backupPrivateKeyAction, generateRecoverySessionAction } from "@/app/actions";
 import { encryptPrivateKeyWithPassword, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X, Lock, Key } from "lucide-react";
 import QRCode from "react-qr-code";
@@ -14,6 +14,7 @@ function E2EEManager({ user }: { user: any }) {
   const [msg, setMsg] = useState("");
   const [showQR, setShowQR] = useState(false);
   const [qrPwd, setQrPwd] = useState("");
+  const [qrUuid, setQrUuid] = useState("");
   const [qrError, setQrError] = useState("");
 
   const privKey = typeof window !== 'undefined' ? localStorage.getItem(`privKey_${user.id}`) : null;
@@ -104,8 +105,14 @@ function E2EEManager({ user }: { user: any }) {
                           const payload = JSON.parse(user.encryptedPrivateKey);
                           const dec = await decryptPrivateKeyWithPassword(payload, val);
                           if (dec) {
-                            setQrPwd(val);
-                            setQrError("");
+                            const res = await generateRecoverySessionAction(val);
+                            if (res.success && res.uuid) {
+                              setQrUuid(res.uuid);
+                              setQrPwd(val);
+                              setQrError("");
+                            } else {
+                              setQrError("Failed to generate session.");
+                            }
                           } else {
                             setQrError("Incorrect password");
                           }
@@ -121,9 +128,9 @@ function E2EEManager({ user }: { user: any }) {
                 </div>
               ) : (
                 <>
-                  <QRCode value={`REC:${user.id}:${qrPwd}`} size={180} level="L" />
+                  <QRCode value={`REC:${qrUuid}`} size={200} level="Q" />
                   <p className="text-[10px] text-center text-gray-500 mt-3 max-w-[180px]">
-                    This QR contains your Master Password. Keep it secret.
+                    Scan this from the login page on your new device to securely log in. Expires in 5 minutes.
                   </p>
                 </>
               )}
@@ -201,8 +208,14 @@ function E2EEManager({ user }: { user: any }) {
                           const payload = JSON.parse(user.encryptedPrivateKey);
                           const dec = await decryptPrivateKeyWithPassword(payload, val);
                           if (dec) {
-                            setQrPwd(val);
-                            setQrError("");
+                            const res = await generateRecoverySessionAction(val);
+                            if (res.success && res.uuid) {
+                              setQrUuid(res.uuid);
+                              setQrPwd(val);
+                              setQrError("");
+                            } else {
+                              setQrError("Failed to generate session.");
+                            }
                           } else {
                             setQrError("Incorrect password");
                           }
@@ -218,9 +231,9 @@ function E2EEManager({ user }: { user: any }) {
                 </div>
               ) : (
                 <>
-                  <QRCode value={`REC:${user.id}:${qrPwd}`} size={180} level="L" />
+                  <QRCode value={`REC:${qrUuid}`} size={200} level="Q" />
                   <p className="text-[10px] text-center text-gray-500 mt-3 max-w-[180px]">
-                    This QR contains your Master Password. Keep it secret.
+                    Scan this from the login page on your new device to securely log in. Expires in 5 minutes.
                   </p>
                 </>
               )}

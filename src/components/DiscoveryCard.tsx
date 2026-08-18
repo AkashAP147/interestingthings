@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, Share, ArrowRight, Check } from "lucide-react";
+import { Heart, Share, ArrowRight, Check, Eye } from "lucide-react";
 import { Discovery, Category } from "@/types";
 import { categories } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
@@ -121,6 +121,15 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
             </span>
           </div>
         )}
+
+        {/* View Count Overlay for Image Only */}
+        {variant === "image-only" && (
+           <div className="absolute top-4 right-4 z-10">
+             <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold bg-black/60 text-white backdrop-blur-md">
+               <Eye className="h-3 w-3" /> {discovery.views || 0}
+             </span>
+           </div>
+        )}
       </div>
 
       {/* Content Container */}
@@ -143,6 +152,9 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
                 {discovery.title}
               </Link>
             </h3>
+            <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+               <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {discovery.views || 0}</span>
+            </div>
           </div>
 
           {/* Action Buttons */}
