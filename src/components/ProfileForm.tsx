@@ -13,6 +13,8 @@ function E2EEManager({ user }: { user: any }) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [msg, setMsg] = useState("");
   const [showQR, setShowQR] = useState(false);
+  const [qrPwd, setQrPwd] = useState("");
+  const [qrError, setQrError] = useState("");
 
   const privKey = typeof window !== 'undefined' ? localStorage.getItem(`privKey_${user.id}`) : null;
   const hasLocalKey = !!privKey;
@@ -76,10 +78,55 @@ function E2EEManager({ user }: { user: any }) {
           >
             {showQR ? "Hide Recovery QR Code" : "Show Recovery QR Code"}
           </button>
-          {showQR && privKey && (
-            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit">
-              <QRCode value={privKey} size={200} />
-              <p className="text-[10px] text-center text-gray-500 mt-2">Screenshot & save this securely.</p>
+          {showQR && (
+            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit shadow-sm border border-purple-light/20">
+              {!qrPwd ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-navy-dark font-medium">Enter Master Password to reveal QR:</p>
+                  <div className="flex gap-2">
+                    <input 
+                      type="password" 
+                      id="qr-pwd-input" 
+                      className="border border-purple-light/50 rounded-lg px-3 py-1.5 text-sm text-navy-dark focus:outline-none focus:border-purple"
+                      placeholder="Password"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') document.getElementById('btn-generate-qr')?.click();
+                      }}
+                    />
+                    <button 
+                      id="btn-generate-qr"
+                      type="button"
+                      className="bg-purple text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-purple-bright"
+                      onClick={async () => {
+                        const val = (document.getElementById('qr-pwd-input') as HTMLInputElement).value;
+                        if (!val) return;
+                        try {
+                          const payload = JSON.parse(user.encryptedPrivateKey);
+                          const dec = await decryptPrivateKeyWithPassword(payload, val);
+                          if (dec) {
+                            setQrPwd(val);
+                            setQrError("");
+                          } else {
+                            setQrError("Incorrect password");
+                          }
+                        } catch(e) {
+                          setQrError("Error verifying password");
+                        }
+                      }}
+                    >
+                      View
+                    </button>
+                  </div>
+                  {qrError && <p className="text-pink text-xs font-semibold">{qrError}</p>}
+                </div>
+              ) : (
+                <>
+                  <QRCode value={`REC:${user.id}:${qrPwd}`} size={180} level="L" />
+                  <p className="text-[10px] text-center text-gray-500 mt-3 max-w-[180px]">
+                    This QR contains your Master Password. Keep it secret.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -128,10 +175,55 @@ function E2EEManager({ user }: { user: any }) {
           >
             {showQR ? "Hide Recovery QR Code" : "Show Recovery QR Code"}
           </button>
-          {showQR && privKey && (
-            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit">
-              <QRCode value={privKey} size={200} />
-              <p className="text-[10px] text-center text-gray-500 mt-2">Screenshot & save this securely.</p>
+          {showQR && (
+            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit shadow-sm border border-purple-light/20">
+              {!qrPwd ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-navy-dark font-medium">Enter Master Password to reveal QR:</p>
+                  <div className="flex gap-2">
+                    <input 
+                      type="password" 
+                      id="qr-pwd-input-2" 
+                      className="border border-purple-light/50 rounded-lg px-3 py-1.5 text-sm text-navy-dark focus:outline-none focus:border-purple"
+                      placeholder="Password"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') document.getElementById('btn-generate-qr-2')?.click();
+                      }}
+                    />
+                    <button 
+                      id="btn-generate-qr-2"
+                      type="button"
+                      className="bg-purple text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-purple-bright"
+                      onClick={async () => {
+                        const val = (document.getElementById('qr-pwd-input-2') as HTMLInputElement).value;
+                        if (!val) return;
+                        try {
+                          const payload = JSON.parse(user.encryptedPrivateKey);
+                          const dec = await decryptPrivateKeyWithPassword(payload, val);
+                          if (dec) {
+                            setQrPwd(val);
+                            setQrError("");
+                          } else {
+                            setQrError("Incorrect password");
+                          }
+                        } catch(e) {
+                          setQrError("Error verifying password");
+                        }
+                      }}
+                    >
+                      View
+                    </button>
+                  </div>
+                  {qrError && <p className="text-pink text-xs font-semibold">{qrError}</p>}
+                </div>
+              ) : (
+                <>
+                  <QRCode value={`REC:${user.id}:${qrPwd}`} size={180} level="L" />
+                  <p className="text-[10px] text-center text-gray-500 mt-3 max-w-[180px]">
+                    This QR contains your Master Password. Keep it secret.
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

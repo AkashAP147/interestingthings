@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { MediaPicker } from '@/components/MediaPicker';
-import { encryptPayload, decryptPayload } from "@/lib/e2ee";
+import { encryptPayload, decryptPayload, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function MessagesPage() {
@@ -163,11 +163,39 @@ export default function MessagesPage() {
     const scanner = new Html5QrcodeScanner("reader", {
       qrbox: { width: 250, height: 250 },
       fps: 5,
+      videoConstraints: {
+        facingMode: "environment"
+      }
     }, false);
 
     scanner.render(
       (decodedText) => {
-        if (decodedText && decodedText.length > 50) {
+        if (decodedText && decodedText.startsWith("REC:")) {
+          const parts = decodedText.split(":");
+          if (parts.length >= 3 && parts[1] === user.id) {
+            const scannedPwd = parts.slice(2).join(":");
+            if (user.encryptedPrivateKey) {
+              try {
+                const payload = JSON.parse(user.encryptedPrivateKey);
+                decryptPrivateKeyWithPassword(payload, scannedPwd).then(res => {
+                  if (res) {
+                    localStorage.setItem(`privKey_${user.id}`, res);
+                    scanner.clear();
+                    setShowScanner(false);
+                    window.location.reload();
+                  } else {
+                    alert("Invalid Master Password in QR Code.");
+                  }
+                });
+              } catch(e) {
+                console.error(e);
+              }
+            }
+          } else {
+            alert("This QR Code does not match your account.");
+          }
+        } else if (decodedText && decodedText.length > 50) {
+          // Legacy support for raw private key QR
           localStorage.setItem(`privKey_${user.id}`, decodedText);
           scanner.clear();
           setShowScanner(false);
