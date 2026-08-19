@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { trackDailyActivityAction, getNotificationsAction, markNotificationsReadAction } from "@/app/actions";
-import { Globe, Sparkles, User as UserIcon, Compass, Search, MessageSquare, Info, Bell, Check, X } from "lucide-react";
+import { trackDailyActivityAction, getNotificationsAction } from "@/app/actions";
+import { Globe, Sparkles, User as UserIcon, Compass, Search, MessageSquare, Info, Bell, Check } from "lucide-react";
 import { SubscribeButton } from "@/components/SubscribeButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -27,7 +27,6 @@ export function Navbar() {
   const pathname = usePathname();
   
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
@@ -40,13 +39,7 @@ export function Navbar() {
     }
   }, [user]);
 
-  const handleOpenNotifications = async () => {
-    setShowNotifications(!showNotifications);
-    if (!showNotifications && unreadNotifs > 0) {
-      await markNotificationsReadAction();
-      setNotifications(notifications.map(n => ({...n, read: true})));
-    }
-  };
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -136,50 +129,16 @@ export function Navbar() {
             </div>
           ) : (
             <div className="hidden lg:flex items-center gap-4 relative">
-              <div className="relative">
-                <button 
-                  onClick={handleOpenNotifications}
-                  className="p-2 text-gray-text hover:text-purple transition-colors rounded-full hover:bg-purple-light/10 relative"
-                >
-                  <Bell className="w-5 h-5" />
-                  {unreadNotifs > 0 && (
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-pink animate-pulse"></span>
-                  )}
-                </button>
-                
-                {showNotifications && (
-                  <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-navy-deep rounded-2xl shadow-2xl border border-purple-light/20 overflow-hidden z-50">
-                    <div className="p-4 border-b border-purple-light/10 flex justify-between items-center bg-purple-light/5">
-                      <h3 className="font-bold text-navy-dark dark:text-white">Notifications</h3>
-                      <button onClick={() => setShowNotifications(false)} className="text-gray-text hover:text-pink">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto divide-y divide-purple-light/5">
-                      {notifications.length === 0 ? (
-                        <div className="p-6 text-center text-sm text-gray-text">No notifications yet.</div>
-                      ) : (
-                        notifications.map(notif => (
-                          <div key={notif.id} className="p-4 hover:bg-purple-light/5 transition-colors flex items-start gap-3">
-                            <div className="p-2 rounded-full bg-purple-light/20 text-purple shrink-0">
-                              {notif.type === 'follow' ? <UserIcon className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-                            </div>
-                            <div className="text-sm">
-                              <p className="text-navy-dark dark:text-white">
-                                <span className="font-bold">{notif.actorName || "Someone"}</span> 
-                                {notif.type === 'follow' ? " started following you." : " liked your photo."}
-                              </p>
-                              <span className="text-xs text-gray-text mt-1 block">
-                                {new Date(notif.createdAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+              <Link 
+                href="/notifications"
+                prefetch={true}
+                className="p-2 text-gray-text hover:text-purple transition-colors rounded-full hover:bg-purple-light/10 relative group"
+              >
+                <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-pink animate-pulse shadow-sm shadow-pink/50"></span>
                 )}
-              </div>
+              </Link>
               
               <Link href="/profile" className="flex items-center gap-2 group">
                 <div className="h-8 w-8 rounded-full overflow-hidden bg-purple-light/20 border-2 border-transparent group-hover:border-purple transition-colors flex items-center justify-center">
@@ -219,46 +178,11 @@ export function Navbar() {
           <Search className="h-6 w-6" />
           <span className="text-[10px] font-semibold">Search</span>
         </Link>
-        <div className="relative flex flex-col items-center">
-          <button onClick={handleOpenNotifications} className={`flex flex-col items-center gap-1 p-2 relative text-gray-text hover:text-navy-dark dark:hover:text-white`}>
-            <Bell className="h-6 w-6" />
-            {unreadNotifs > 0 && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink animate-pulse"></span>}
-            <span className="text-[10px] font-semibold">Alerts</span>
-          </button>
-          
-          {showNotifications && (
-            <div className="absolute bottom-full right-[-50px] mb-4 w-[90vw] max-w-sm bg-white dark:bg-navy-deep rounded-2xl shadow-2xl border border-purple-light/20 overflow-hidden z-50 text-left">
-              <div className="p-4 border-b border-purple-light/10 flex justify-between items-center bg-purple-light/5">
-                <h3 className="font-bold text-navy-dark dark:text-white">Notifications</h3>
-                <button onClick={() => setShowNotifications(false)} className="text-gray-text hover:text-pink">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="max-h-[300px] overflow-y-auto divide-y divide-purple-light/5">
-                {notifications.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-gray-text">No notifications yet.</div>
-                ) : (
-                  notifications.map(notif => (
-                    <div key={notif.id} className="p-4 hover:bg-purple-light/5 transition-colors flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-purple-light/20 text-purple shrink-0">
-                        {notif.type === 'follow' ? <UserIcon className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-                      </div>
-                      <div className="text-sm">
-                        <p className="text-navy-dark dark:text-white">
-                          <span className="font-bold">{notif.actorName || "Someone"}</span> 
-                          {notif.type === 'follow' ? " started following you." : " liked your photo."}
-                        </p>
-                        <span className="text-xs text-gray-text mt-1 block">
-                          {new Date(notif.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        <Link href="/notifications" prefetch={true} className={`flex flex-col items-center gap-1 p-2 relative ${pathname === '/notifications' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+          <Bell className="h-6 w-6" />
+          {unreadNotifs > 0 && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink animate-pulse"></span>}
+          <span className="text-[10px] font-semibold">Alerts</span>
+        </Link>
         {user && (
           <Link href="/messages" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/messages' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
             <div className="relative">
