@@ -35,13 +35,24 @@ export async function getUserEncryptedPrivateKeyAction(uid: string) {
 }
 
 export async function getNotificationsAction() {
-  const { getNotifications } = await import("@/lib/user-db");
+  const { getNotifications, getUserById } = await import("@/lib/user-db");
   const cookieStore = await cookies();
   const userId = cookieStore.get("auth_user")?.value;
   if (!userId) return { success: false, notifications: [] };
   
   const notifications = await getNotifications(userId);
-  return { success: true, notifications };
+  
+  const enriched = await Promise.all(notifications.map(async (n: any) => {
+    if (n.actorId) {
+       const actor = await getUserById(n.actorId);
+       if (actor) {
+         return { ...n, actorName: actor.name || actor.username || "Someone" };
+       }
+    }
+    return { ...n, actorName: "Someone" };
+  }));
+  
+  return { success: true, notifications: enriched };
 }
 
 export async function markNotificationsReadAction() {
