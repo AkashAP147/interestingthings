@@ -541,7 +541,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className={`flex-1 flex-col bg-gray-50/50 dark:bg-navy-deep ${!activeChatId ? 'hidden md:flex' : 'flex fixed inset-0 z-[100] md:static md:z-auto'}`}>
+      <div className={`flex-1 flex-col bg-gray-50/50 dark:bg-navy-deep max-w-full overflow-x-hidden ${!activeChatId ? 'hidden md:flex' : 'flex fixed inset-0 z-[100] md:static md:z-auto'}`}>
         {!activeChatId ? (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-text p-8 text-center">
             <MessageSquare className="h-16 w-16 mb-6 opacity-20" />
@@ -589,7 +589,7 @@ export default function MessagesPage() {
             </div>
             
             {/* Messages Scroll Area */}
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
               {messages.length === 0 && pendingMessages.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-gray-text">
                   <p>Send a message to start the conversation!</p>
@@ -675,7 +675,7 @@ export default function MessagesPage() {
                 )}
               </AnimatePresence>
 
-              <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto items-end">
+              <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto items-end w-full">
                 <div className="flex-1 bg-gray-50 dark:bg-navy-deep border border-purple-light/30 rounded-3xl flex items-center px-2 py-1 focus-within:ring-2 focus-within:ring-purple-light transition-all">
                   
                   <button

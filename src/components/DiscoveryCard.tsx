@@ -184,7 +184,7 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
               </div>
               <button 
                 onClick={handleShare}
-                className={`p-1 rounded-full transition-colors ${
+                className={`p-3 -m-2 rounded-full transition-colors z-20 relative ${
                   isCopied ? "text-green" : "text-gray-text hover:text-blue hover:bg-blue/10"
                 }`} 
                 aria-label="Share"
