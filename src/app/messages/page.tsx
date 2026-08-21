@@ -15,21 +15,8 @@ import { Html5Qrcode } from 'html5-qrcode';
 export default function MessagesPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [chats, setChats] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      const cached = sessionStorage.getItem('timit_chats');
-      if (cached) {
-        try { return JSON.parse(cached); } catch(e) {}
-      }
-    }
-    return [];
-  });
-  const [isLoadingChats, setIsLoadingChats] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !sessionStorage.getItem('timit_chats');
-    }
-    return true;
-  });
+  const [chats, setChats] = useState<any[]>([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -79,7 +66,10 @@ export default function MessagesPage() {
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem(`timit_chats_${user.id}`);
       if (cached) {
-        try { setChats(JSON.parse(cached)); } catch(e) {}
+        try { 
+          setChats(JSON.parse(cached)); 
+          setIsLoadingChats(false);
+        } catch(e) {}
       }
     }
     
