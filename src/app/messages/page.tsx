@@ -311,24 +311,35 @@ export default function MessagesPage() {
         const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
         const totalChunks = Math.ceil(base64Media.length / CHUNK_SIZE);
+        const CONCURRENCY = 4;
         
-        for (let i = 0; i < totalChunks; i++) {
-          const chunk = base64Media.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-          let chunkSuccess = false;
-          let attempts = 0;
-          
-          while (!chunkSuccess && attempts < 10) {
-            try {
-              const res = await uploadChunkAction(tempId, i, chunk);
-              if (res.error) throw new Error(res.error);
-              chunkSuccess = true;
-              console.log(`Uploaded chunk ${i + 1}/${totalChunks}`);
-            } catch (err) {
-              attempts++;
-              if (attempts >= 10) throw err;
-              await new Promise(r => setTimeout(r, 2000 * attempts)); // wait before retry
-            }
+        for (let i = 0; i < totalChunks; i += CONCURRENCY) {
+          const batch = [];
+          for (let j = 0; j < CONCURRENCY && i + j < totalChunks; j++) {
+            const chunkIndex = i + j;
+            const chunk = base64Media.slice(chunkIndex * CHUNK_SIZE, (chunkIndex + 1) * CHUNK_SIZE);
+            
+            // Promise for a single chunk with retry logic
+            const uploadPromise = (async () => {
+              let chunkSuccess = false;
+              let attempts = 0;
+              while (!chunkSuccess && attempts < 5) {
+                try {
+                  const res = await uploadChunkAction(tempId, chunkIndex, chunk);
+                  if (res.error) throw new Error(res.error);
+                  chunkSuccess = true;
+                  console.log(`Uploaded chunk ${chunkIndex + 1}/${totalChunks}`);
+                } catch (err) {
+                  attempts++;
+                  if (attempts >= 5) throw err;
+                  await new Promise(r => setTimeout(r, 1500 * attempts));
+                }
+              }
+            })();
+            batch.push(uploadPromise);
           }
+          // Wait for the current batch of 4 chunks to finish before starting the next batch
+          await Promise.all(batch);
         }
         
         const finalRes = await finalizeUploadAction(tempId, totalChunks);
