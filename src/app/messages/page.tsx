@@ -38,25 +38,50 @@ export default function MessagesPage() {
   
   const previousMessagesLength = useRef(0);
   const previousPendingLength = useRef(0);
+  const activeChatRef = useRef<string | null>(null);
 
-  // Auto-scroll to bottom only when new messages arrive
+  // Auto-scroll to bottom
   useEffect(() => {
-    const isNewMessage = messages.length > previousMessagesLength.current;
-    const isNewPending = pendingMessages.length > previousPendingLength.current;
-    const isInitialLoad = messages.length > 0 && previousMessagesLength.current === 0;
+    const isNewChat = activeChatRef.current !== activeChatId;
     
-    if (isNewMessage || isNewPending || isInitialLoad) {
+    if (isNewChat && messages.length > 0) {
+      // Instant scroll when opening a chat
+      activeChatRef.current = activeChatId;
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTo({
           top: scrollContainerRef.current.scrollHeight,
-          behavior: "smooth"
+          behavior: "auto"
         });
       }
+    } else if (!isNewChat) {
+      // Smooth scroll for new messages in current chat
+      const isNewMessage = messages.length > previousMessagesLength.current;
+      const isNewPending = pendingMessages.length > previousPendingLength.current;
+      
+      if (isNewMessage || isNewPending) {
+        if (scrollContainerRef.current) {
+          // Only auto-scroll if we are somewhat near the bottom to avoid interrupting reading
+          const container = scrollContainerRef.current;
+          const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
+          
+          if (isNearBottom || isNewPending) {
+            container.scrollTo({
+              top: container.scrollHeight,
+              behavior: "smooth"
+            });
+          }
+        }
+      }
+    }
+    
+    // Update refs if not already updated by isNewChat
+    if (!isNewChat || messages.length === 0) {
+       activeChatRef.current = activeChatId;
     }
     
     previousMessagesLength.current = messages.length;
     previousPendingLength.current = pendingMessages.length;
-  }, [messages, pendingMessages]);
+  }, [messages, pendingMessages, activeChatId]);
 
   // Fetch Chats Polling
   useEffect(() => {
