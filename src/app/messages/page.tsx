@@ -361,7 +361,21 @@ export default function MessagesPage() {
     setPendingMessages(prev => [...prev, pendingMsg]);
     
     try {
-      await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
+      let success = false;
+      let attempts = 0;
+      
+      while (!success && attempts < 5) {
+        try {
+          const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
+          if (result?.error) throw new Error(result.error);
+          success = true;
+        } catch (err) {
+          attempts++;
+          if (attempts >= 5) throw err;
+          // Wait before retrying (2s, 4s, 6s, 8s) to gracefully handle internet cuts
+          await new Promise(res => setTimeout(res, 2000 * attempts));
+        }
+      }
       
       // Fetch fresh messages immediately after sending to trigger decrypt pipeline
       const res = await getMessagesAction(activeChatId);
