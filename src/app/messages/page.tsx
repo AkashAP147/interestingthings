@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction } from "@/app/actions";
+import { startChatAction, sendMessageAction, getChatsAction, markChatsDeliveredAction, markChatReadAction } from "@/app/actions";
 import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -11,6 +11,8 @@ import { useSearchParams } from "next/navigation";
 import { MediaPicker } from '@/components/MediaPicker';
 import { encryptPayload, decryptPayload, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Html5Qrcode } from 'html5-qrcode';
+import { database } from '@/lib/firebase-client';
+import { ref, onValue, off } from 'firebase/database';
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -122,46 +124,63 @@ export default function MessagesPage() {
       }
     }
     
-    const fetchMessages = async () => {
-      try {
-        const res = await getMessagesAction(activeChatId);
-        if (!isActive) return; // Abort if switched chats
-        
-        if (res.success && res.messages) {
-          const privKey = localStorage.getItem(`privKey_${user.id}`);
-          
-          const decryptedMessages = await Promise.all(res.messages.map(async (msg: any) => {
-            if (msg.payload && privKey) {
-              const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
-              const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
-              if (decrypted) {
-                return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
-              } else {
-                return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
-              }
-            }
-            return msg;
-          }));
-          
-          if (!isActive) return; // Abort if switched chats during decryption
-          
-          setMessages(decryptedMessages);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(`timit_msgs_${activeChatId}_${user.id}`, JSON.stringify(decryptedMessages));
+    const messagesRef = ref(database, `messages/${activeChatId}`);
+    
+    const listener = onValue(messagesRef, async (snapshot) => {
+      if (!isActive) return;
+      
+      const data = snapshot.val() || {};
+      
+      // Check if we need to mark messages as read
+      let hasUnreadIncoming = false;
+      
+      const rawMessages = Object.keys(data).map(key => ({
+        id: key,
+        ...data[key]
+      }))
+      .filter((msg: any) => !(msg.deletedBy || []).includes(user.id))
+      .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      
+      rawMessages.forEach((msg: any) => {
+        if (msg.senderId !== user.id && msg.status !== "read") {
+          hasUnreadIncoming = true;
+        }
+      });
+      
+      if (hasUnreadIncoming) {
+        markChatReadAction(activeChatId).catch(console.error);
+      }
+      
+      const privKey = localStorage.getItem(`privKey_${user.id}`);
+      
+      const decryptedMessages = await Promise.all(rawMessages.map(async (msg: any) => {
+        if (msg.payload && privKey) {
+          const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
+          const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
+          if (decrypted) {
+            return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
+          } else {
+            return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
           }
         }
-      } catch (e) {
-        console.error("Failed to fetch messages");
-      } finally {
-        if (isActive) setIsLoadingMessages(false);
+        return msg;
+      }));
+      
+      if (!isActive) return;
+      
+      setMessages(decryptedMessages);
+      setIsLoadingMessages(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`timit_msgs_${activeChatId}_${user.id}`, JSON.stringify(decryptedMessages));
       }
-    };
+    }, (error) => {
+      console.error("Firebase onValue error:", error);
+      setIsLoadingMessages(false);
+    });
 
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000); // 5 seconds to save quota
     return () => {
       isActive = false;
-      clearInterval(interval);
+      off(messagesRef, 'value', listener);
     };
   }, [activeChatId, user]);
 
@@ -370,21 +389,8 @@ export default function MessagesPage() {
         }
       }
       
-      // Fetch fresh messages immediately after sending to trigger decrypt pipeline
-      const res = await getMessagesAction(activeChatId);
-      if (res.success && res.messages) {
-        const privKey = localStorage.getItem(`privKey_${user.id}`);
-        const decryptedMessages = await Promise.all(res.messages.map(async (msg: any) => {
-          if (msg.payload && privKey) {
-            const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
-            const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
-            if (decrypted) return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
-            return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
-          }
-          return msg;
-        }));
-        setMessages(decryptedMessages);
-      }
+      // Note: We no longer need to manually fetch messages here!
+      // The Firebase onValue listener handles decrypting and updating the state instantly.
     } catch(err) {
       console.error("Failed to send message", err);
     } finally {
@@ -606,10 +612,29 @@ export default function MessagesPage() {
                 )].reverse().map((msg, i, arr) => {
                   const isMine = msg.senderId === user.id;
                   const showAvatar = i === 0 || arr[i-1].senderId !== msg.senderId;
+                  const showDateHeader = i === arr.length - 1 || new Date(msg.createdAt).toDateString() !== new Date(arr[i+1].createdAt).toDateString();
+                  
+                  const formatDateHeader = (dateString: string) => {
+                    const date = new Date(dateString);
+                    const today = new Date();
+                    const yesterday = new Date();
+                    yesterday.setDate(today.getDate() - 1);
+
+                    if (date.toDateString() === today.toDateString()) return "Today";
+                    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+                    
+                    const diffTime = today.getTime() - date.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    if (diffDays < 7) {
+                      return date.toLocaleDateString(undefined, { weekday: 'long' });
+                    }
+                    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                  };
                   
                   return (
-                    <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-6' : 'mt-1'} group`}>
-                      {!isMine && showAvatar && (
+                    <div key={msg.id} className="flex flex-col">
+                      <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-6' : 'mt-1'} group`}>
+                        {!isMine && showAvatar && (
                         <Link href={`/profile/${activeChatOtherUser?.username || activeChatOtherUser?.id}`} className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-light to-blue mr-2 shrink-0 self-end mb-1 flex items-center justify-center relative overflow-hidden hover:ring-2 ring-purple transition-all shadow-sm">
                           {activeChatOtherUser?.profilePicture ? (
                             <Image src={activeChatOtherUser.profilePicture} alt="Profile" fill className="object-cover" sizes="32px" />
@@ -655,6 +680,14 @@ export default function MessagesPage() {
                         </span>
                       </div>
                     </div>
+                    {showDateHeader && (
+                      <div className="flex justify-center w-full my-6 mb-2">
+                        <span className="bg-purple-light/10 dark:bg-navy-dark text-purple dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                          {formatDateHeader(msg.createdAt)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   );
                 })
               )}

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getNotificationsAction, markNotificationsReadAction } from "@/app/actions";
-import { Bell, Sparkles, User as UserIcon, Loader2, MessageSquare } from "lucide-react";
+import { getNotificationsAction, markNotificationsReadAction, updateUserLocationAction, getFriendSuggestionsAction } from "@/app/actions";
+import { Bell, Sparkles, User as UserIcon, Loader2, MessageSquare, MapPin, Users, Navigation } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -11,7 +11,10 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -39,7 +42,49 @@ export default function NotificationsPage() {
     };
 
     fetchAndMarkRead();
+    
+    // Load initial suggestions if available
+    const fetchSuggestions = async () => {
+      const res = await getFriendSuggestionsAction();
+      if (res.success && res.suggestions) {
+        setSuggestions(res.suggestions);
+        // If we get suggestions that have a location score, it means location is already enabled
+        if (res.suggestions.some((s: any) => s.distanceKm !== undefined)) {
+          setLocationEnabled(true);
+        }
+      }
+    };
+    fetchSuggestions();
   }, [user, router]);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    
+    setIsLoadingSuggestions(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        await updateUserLocationAction(position.coords.latitude, position.coords.longitude);
+        setLocationEnabled(true);
+        
+        // Refresh suggestions
+        const res = await getFriendSuggestionsAction();
+        if (res.success && res.suggestions) {
+          setSuggestions(res.suggestions);
+        }
+      } catch (err) {
+        console.error("Failed to update location", err);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, (error) => {
+      console.error("Geolocation error", error);
+      alert("Failed to get location. Please allow location permissions in your browser.");
+      setIsLoadingSuggestions(false);
+    });
+  };
 
   if (!user) return null;
 
@@ -54,6 +99,61 @@ export default function NotificationsPage() {
             <h1 className="text-2xl font-heading font-bold text-navy-dark dark:text-white">Notifications</h1>
             <p className="text-sm text-gray-text">Catch up on what you missed</p>
           </div>
+        </div>
+        
+        {/* Friend Suggestions Section */}
+        <div className="bg-gradient-to-br from-purple-light/10 to-transparent border-b border-purple-light/20 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-heading font-bold text-navy-dark dark:text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-purple" />
+              Suggested Friends
+            </h2>
+            {!locationEnabled && (
+              <button 
+                onClick={requestLocation}
+                disabled={isLoadingSuggestions}
+                className="flex items-center gap-2 bg-purple text-white px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-purple-bright transition-colors"
+              >
+                {isLoadingSuggestions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+                Find Nearby
+              </button>
+            )}
+          </div>
+          
+          {!locationEnabled && suggestions.length === 0 ? (
+            <div className="text-sm text-gray-text flex items-center gap-2 p-4 bg-white dark:bg-navy-dark rounded-xl border border-dashed border-purple-light/30">
+              <MapPin className="w-5 h-5 text-purple/50" />
+              Enable location to find interesting people within 60km of you, or connect based on mutuals!
+            </div>
+          ) : suggestions.length === 0 ? (
+             <p className="text-sm text-gray-text italic">No suggestions right now. Try following more people!</p>
+          ) : (
+            <div className="flex overflow-x-auto gap-4 pb-2 minimal-scrollbar">
+              {suggestions.map((s, idx) => (
+                <Link 
+                  key={idx}
+                  href={`/profile/${s.user.username || s.user.id}`}
+                  className="flex-shrink-0 w-48 bg-white dark:bg-navy-dark border border-purple-light/20 rounded-2xl p-4 flex flex-col items-center text-center hover:border-purple hover:shadow-md transition-all group"
+                >
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-light to-blue p-[2px] mb-3">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white dark:bg-navy-deep flex items-center justify-center">
+                      {s.user.profilePicture ? (
+                        <img src={s.user.profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-8 h-8 text-purple/50" />
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-navy-dark dark:text-white truncate w-full group-hover:text-purple transition-colors">
+                    {s.user.name || s.user.username || "User"}
+                  </h3>
+                  <p className="text-xs text-purple mt-1 font-medium bg-purple/10 px-2 py-0.5 rounded-full inline-block">
+                    {s.reason}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="divide-y divide-purple-light/5 min-h-[400px]">
@@ -79,7 +179,13 @@ export default function NotificationsPage() {
                   <div className="flex-1">
                     <p className="text-navy-dark dark:text-white text-base">
                       {notif.actorId ? (
-                        <span className="font-bold hover:text-purple transition-colors">
+                        <span 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            router.push(`/profile/${notif.actorId}`);
+                          }}
+                          className="font-bold hover:text-purple transition-colors cursor-pointer"
+                        >
                           {notif.actorName || "Someone"}
                         </span>
                       ) : (

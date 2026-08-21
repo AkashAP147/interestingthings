@@ -22,6 +22,11 @@ export interface User {
   encryptedPrivateKey?: string; // stringified JSON object
   publicKey?: string;
   lastActiveAt?: string;
+  location?: {
+    lat: number;
+    lng: number;
+    updatedAt: string;
+  };
 }
 
 export interface Notification {
@@ -332,4 +337,102 @@ export async function markNotificationsRead(userId: string): Promise<void> {
   } catch (error) {
     console.error("Failed to mark notifications read", error);
   }
+}
+
+// Haversine formula to calculate distance in km between two lat/lng points
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; 
+}
+
+export async function updateUserLocation(userId: string, lat: number, lng: number): Promise<void> {
+  const docRef = database.ref(`${COLLECTION}/${userId}`);
+  await docRef.update({
+    location: {
+      lat,
+      lng,
+      updatedAt: new Date().toISOString()
+    }
+  });
+}
+
+export interface FriendSuggestion {
+  user: User;
+  distanceKm?: number;
+  mutualFollowers: number;
+  score: number;
+  reason: string;
+}
+
+export async function getFriendSuggestions(userId: string): Promise<FriendSuggestion[]> {
+  const users = await readUsersDB();
+  const currentUser = users.find(u => u.id === userId);
+  
+  if (!currentUser) return [];
+
+  const currentUserFollowers = currentUser.followers || [];
+  const currentUserFollowing = currentUser.following || [];
+  
+  const suggestions: FriendSuggestion[] = [];
+
+  for (const otherUser of users) {
+    if (otherUser.id === userId) continue;
+    
+    // Skip if we already follow them
+    if (currentUserFollowing.includes(otherUser.id)) continue;
+    
+    // Skip if they are an admin or bot (optional filter, we can just skip based on role)
+    // if (otherUser.role === 'admin') continue;
+
+    let score = 0;
+    let distanceKm: number | undefined = undefined;
+    let mutualFollowers = 0;
+    let reasons: string[] = [];
+
+    // 1. Location-based matching
+    if (currentUser.location && otherUser.location) {
+      distanceKm = getDistanceFromLatLonInKm(
+        currentUser.location.lat, currentUser.location.lng,
+        otherUser.location.lat, otherUser.location.lng
+      );
+      
+      // If within 60km, give points (closer = more points)
+      if (distanceKm <= 60) {
+        score += (60 - distanceKm) * 2; // up to 120 points for location
+        reasons.push(distanceKm < 1 ? "Very close to you" : `${Math.round(distanceKm)}km away`);
+      }
+    }
+
+    // 2. Mutual connections
+    const otherUserFollowers = otherUser.followers || [];
+    // Count how many people I follow that follow this person (mutuals)
+    const mutuals = currentUserFollowing.filter(id => otherUserFollowers.includes(id));
+    mutualFollowers = mutuals.length;
+    
+    if (mutualFollowers > 0) {
+      score += mutualFollowers * 50; // heavily weight mutuals
+      reasons.push(`${mutualFollowers} mutual connection${mutualFollowers > 1 ? 's' : ''}`);
+    }
+    
+    // Require at least some reason to suggest them
+    if (score > 0) {
+      suggestions.push({
+        user: otherUser,
+        distanceKm,
+        mutualFollowers,
+        score,
+        reason: reasons[0] || "Recommended for you"
+      });
+    }
+  }
+
+  // Sort by score descending and return top 10
+  return suggestions.sort((a, b) => b.score - a.score).slice(0, 10);
 }

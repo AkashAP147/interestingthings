@@ -579,6 +579,37 @@ export async function getMessagesAction(chatId: string) {
   return { success: true, messages };
 }
 
+export async function markChatReadAction(chatId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  
+  const messagesSnap = await database.ref(`messages/${chatId}`).once('value');
+  const messagesObj = messagesSnap.val() || {};
+  
+  let hasUpdates = false;
+  const updates: any = {};
+  
+  Object.keys(messagesObj).forEach(key => {
+    const msg = messagesObj[key];
+    if (msg.senderId !== currentUserId && msg.status !== "read") {
+      updates[`${key}/status`] = "read";
+      hasUpdates = true;
+    }
+  });
+
+  if (hasUpdates) {
+    await database.ref(`messages/${chatId}`).update(updates);
+  }
+  
+  // Reset unread count for this chat for the current user
+  await database.ref(`chats/${chatId}/unreadCount_${currentUserId}`).set(0);
+  
+  return { success: true };
+}
+
 export async function deleteMessageAction(chatId: string, messageId: string, forEveryone: boolean) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
@@ -956,4 +987,24 @@ export async function markChatsDeliveredAction(chatIds: string[]) {
     }
   }
   return { success: true };
+}
+
+export async function updateUserLocationAction(lat: number, lng: number) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { updateUserLocation } = await import("@/lib/user-db");
+  await updateUserLocation(currentUserId, lat, lng);
+  return { success: true };
+}
+
+export async function getFriendSuggestionsAction() {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized", suggestions: [] };
+
+  const { getFriendSuggestions } = await import("@/lib/user-db");
+  const suggestions = await getFriendSuggestions(currentUserId);
+  return { success: true, suggestions };
 }
