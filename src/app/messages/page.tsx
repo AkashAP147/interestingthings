@@ -75,6 +75,14 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!user) return;
     
+    // Load from cache instantly
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(`timit_chats_${user.id}`);
+      if (cached) {
+        try { setChats(JSON.parse(cached)); } catch(e) {}
+      }
+    }
+    
     const fetchChats = async () => {
       try {
         const res = await getChatsAction();
@@ -92,7 +100,7 @@ export default function MessagesPage() {
           }));
           setChats(decryptedChats);
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('timit_chats', JSON.stringify(decryptedChats));
+            localStorage.setItem(`timit_chats_${user.id}`, JSON.stringify(decryptedChats));
           }
             
             // Mark incoming messages as delivered
@@ -129,7 +137,7 @@ export default function MessagesPage() {
     if (!activeChatId || !user) return;
     
     if (typeof window !== 'undefined') {
-      const cached = sessionStorage.getItem(`timit_msgs_${activeChatId}`);
+      const cached = localStorage.getItem(`timit_msgs_${activeChatId}_${user.id}`);
       if (cached) {
         try { setMessages(JSON.parse(cached)); } catch(e) {}
       } else {
@@ -158,7 +166,7 @@ export default function MessagesPage() {
           
           setMessages(decryptedMessages);
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem(`timit_msgs_${activeChatId}`, JSON.stringify(decryptedMessages));
+            localStorage.setItem(`timit_msgs_${activeChatId}_${user.id}`, JSON.stringify(decryptedMessages));
           }
         }
       } catch (e) {

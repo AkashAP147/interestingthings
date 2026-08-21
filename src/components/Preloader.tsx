@@ -11,12 +11,16 @@ export function Preloader() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setShow(true);
-      const timer = setTimeout(() => {
-        setShow(false);
-      }, 1500); // 1.5 seconds loading screen
-      return () => clearTimeout(timer);
+    if (user && typeof window !== 'undefined') {
+      const hasLoaded = sessionStorage.getItem("timit_preloaded");
+      if (!hasLoaded) {
+        setShow(true);
+        sessionStorage.setItem("timit_preloaded", "true");
+        const timer = setTimeout(() => {
+          setShow(false);
+        }, 1500); // 1.5 seconds loading screen
+        return () => clearTimeout(timer);
+      }
     }
   }, [user]);
 
