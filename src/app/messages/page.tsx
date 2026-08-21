@@ -19,6 +19,7 @@ export default function MessagesPage() {
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [searchUsername, setSearchUsername] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -35,65 +36,8 @@ export default function MessagesPage() {
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
   const previousMessagesLength = useRef(0);
-  const previousPendingLength = useRef(0);
-  const activeChatRef = useRef<string | null>(null);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    const isNewChat = activeChatRef.current !== activeChatId;
-    const isInitialMessageLoad = messages.length > 0 && previousMessagesLength.current === 0;
-    
-    if (isNewChat && messages.length > 0) {
-      // Instant scroll when opening a chat if cache was already present
-      activeChatRef.current = activeChatId;
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: "auto"
-        });
-      }
-    } else if (!isNewChat) {
-      // Logic for when we are already in the chat
-      const isNewMessage = messages.length > previousMessagesLength.current;
-      const isNewPending = pendingMessages.length > previousPendingLength.current;
-      
-      if (isInitialMessageLoad) {
-        // If we just finished fetching the initial messages, ALWAYS snap to bottom
-        if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTo({
-            top: scrollContainerRef.current.scrollHeight,
-            behavior: "auto"
-          });
-        }
-      } else if (isNewMessage || isNewPending) {
-        // Normal new message arrived or user sent a message
-        if (scrollContainerRef.current) {
-          const container = scrollContainerRef.current;
-          const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
-          // If a pending message transitioned to a real message, we want to ensure we scroll
-          const isPendingTransition = isNewMessage && pendingMessages.length < previousPendingLength.current;
-          
-          if (isNearBottom || isNewPending || isPendingTransition) {
-            // Use auto (instant) if it's a pending transition to avoid animation jank
-            container.scrollTo({
-              top: container.scrollHeight,
-              behavior: isPendingTransition ? "auto" : "smooth"
-            });
-          }
-        }
-      }
-    }
-    
-    // Update refs if not already updated by isNewChat
-    if (!isNewChat || messages.length === 0) {
-       activeChatRef.current = activeChatId;
-    }
-    
-    previousMessagesLength.current = messages.length;
-    previousPendingLength.current = pendingMessages.length;
-  }, [messages, pendingMessages, activeChatId]);
+  // Remove manual scroll management - we'll use CSS flex-col-reverse instead
 
   // Fetch Chats Polling
   useEffect(() => {
@@ -168,9 +112,13 @@ export default function MessagesPage() {
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem(`timit_msgs_${activeChatId}_${user.id}`);
       if (cached) {
-        try { setMessages(JSON.parse(cached)); } catch(e) {}
+        try { 
+          setMessages(JSON.parse(cached));
+          setIsLoadingMessages(false);
+        } catch(e) {}
       } else {
         setMessages([]);
+        setIsLoadingMessages(true);
       }
     }
     
@@ -204,6 +152,8 @@ export default function MessagesPage() {
         }
       } catch (e) {
         console.error("Failed to fetch messages");
+      } finally {
+        if (isActive) setIsLoadingMessages(false);
       }
     };
 
@@ -528,7 +478,7 @@ export default function MessagesPage() {
         </div>
 
         {/* Chat List */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden minimal-scrollbar">
           {isLoadingChats ? (
             <div className="p-8 flex justify-center items-center h-full text-purple/50">
               <Loader2 className="w-8 h-8 animate-spin" />
@@ -633,13 +583,20 @@ export default function MessagesPage() {
             </div>
             
             {/* Messages Scroll Area */}
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
-              {messages.length === 0 && pendingMessages.length === 0 ? (
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 gap-4 minimal-scrollbar flex flex-col-reverse">
+              {isLoadingMessages ? (
+                <div className="h-full flex items-center justify-center text-purple/50">
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                </div>
+              ) : messages.length === 0 && pendingMessages.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-gray-text">
                   <p>Send a message to start the conversation!</p>
                 </div>
               ) : (
-                [...messages, ...pendingMessages].map((msg, i, arr) => {
+                [...messages, ...pendingMessages.filter(pm => 
+                  // Don't render pending messages that have already been fetched by background polling
+                  !messages.some(m => m.senderId === pm.senderId && m.text === pm.text && m.imageUrl === pm.imageUrl)
+                )].reverse().map((msg, i, arr) => {
                   const isMine = msg.senderId === user.id;
                   const showAvatar = i === 0 || arr[i-1].senderId !== msg.senderId;
                   

@@ -60,14 +60,14 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
     <div className="px-6 lg:px-8 max-w-7xl mx-auto w-full py-12 flex flex-col gap-12">
       {/* Profile Header & Streak */}
       <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 bg-white dark:bg-navy-deep p-8 rounded-3xl shadow-sm border border-purple-light/20">
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col md:flex-row items-center md:items-start gap-6 text-center md:text-left">
           <EditProfileModal user={user} />
-          <div>
+          <div className="flex flex-col items-center md:items-start">
             <h1 className="font-heading text-3xl font-bold tracking-tight text-navy-dark dark:text-white">
               {user.name || "Curious Explorer"}
             </h1>
             <p className="text-gray-text mt-1">@{user.username || user.id}</p>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex items-center justify-center md:justify-start gap-2">
               <span className="text-sm font-semibold text-orange bg-orange/10 px-3 py-1 rounded-full animate-in slide-in-from-bottom-2 fade-in duration-500">
                 {user.curiosityPoints || 0} Curiosity Points
               </span>

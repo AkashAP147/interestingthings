@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNotificationsAction, markNotificationsReadAction } from "@/app/actions";
-import { Bell, Sparkles, User as UserIcon, Loader2 } from "lucide-react";
+import { Bell, Sparkles, User as UserIcon, Loader2, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -68,41 +68,60 @@ export default function NotificationsPage() {
               <p className="text-sm mt-2">You don't have any notifications yet.</p>
             </div>
           ) : (
-            notifications.map(notif => (
-              <div 
-                key={notif.id} 
-                className={`p-6 hover:bg-purple-light/5 transition-colors flex items-start gap-4 ${!notif.read ? 'bg-purple-light/5' : ''}`}
-              >
-                <div className="p-3 rounded-full bg-purple-light/20 text-purple shrink-0 mt-1">
-                  {notif.type === 'follow' ? <UserIcon className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+            notifications.map(notif => {
+              const content = (
+                <>
+                  <div className="p-3 rounded-full bg-purple-light/20 text-purple shrink-0 mt-1">
+                    {notif.type === 'follow' ? <UserIcon className="w-5 h-5" /> : 
+                     notif.type === 'message' ? <MessageSquare className="w-5 h-5" /> : 
+                     <Sparkles className="w-5 h-5" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-navy-dark dark:text-white text-base">
+                      {notif.actorId ? (
+                        <span className="font-bold hover:text-purple transition-colors">
+                          {notif.actorName || "Someone"}
+                        </span>
+                      ) : (
+                        <span className="font-bold">{notif.actorName || "Someone"}</span>
+                      )}
+                      {notif.type === 'follow' ? " started following you." : 
+                       notif.type === 'message' ? " sent you a new message." : 
+                       " interacted with you."}
+                    </p>
+                    <span className="text-sm text-gray-text mt-2 block font-medium">
+                      {new Date(notif.createdAt).toLocaleDateString(undefined, { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  {!notif.read && (
+                    <div className="w-3 h-3 rounded-full bg-pink shrink-0 mt-3 shadow-sm shadow-pink/30"></div>
+                  )}
+                </>
+              );
+
+              const wrapperClass = `p-6 hover:bg-purple-light/5 transition-colors flex items-start gap-4 ${!notif.read ? 'bg-purple-light/5' : ''}`;
+
+              if (notif.link) {
+                return (
+                  <Link key={notif.id} href={notif.link} className={wrapperClass}>
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={notif.id} className={wrapperClass}>
+                  {content}
                 </div>
-                <div className="flex-1">
-                  <p className="text-navy-dark dark:text-white text-base">
-                    {notif.actorId ? (
-                      <Link href={`/profile/${notif.actorId}`} className="font-bold hover:text-purple transition-colors">
-                        {notif.actorName || "Someone"}
-                      </Link>
-                    ) : (
-                      <span className="font-bold">{notif.actorName || "Someone"}</span>
-                    )}
-                    {notif.type === 'follow' ? " started following you." : " liked your photo."}
-                  </p>
-                  <span className="text-sm text-gray-text mt-2 block font-medium">
-                    {new Date(notif.createdAt).toLocaleDateString(undefined, { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-                {!notif.read && (
-                  <div className="w-3 h-3 rounded-full bg-pink shrink-0 mt-3 shadow-sm shadow-pink/30"></div>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

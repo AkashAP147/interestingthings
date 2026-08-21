@@ -469,6 +469,18 @@ export async function sendMessageAction(chatId: string, text?: string, imageUrl?
   if (recipientId) {
     const currentUnread = chatData[`unreadCount_${recipientId}`] || 0;
     await chatRef.child(`unreadCount_${recipientId}`).set(currentUnread + 1);
+    
+    // Create an in-app notification for the recipient
+    const { createNotification } = await import("@/lib/user-db");
+    await createNotification({
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      userId: recipientId,
+      actorId: currentUserId,
+      type: 'message',
+      link: `/messages?chatId=${chatId}`,
+      read: false,
+      createdAt: timestamp
+    } as any);
   }
 
   return { success: true };
