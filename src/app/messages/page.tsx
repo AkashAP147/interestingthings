@@ -43,9 +43,10 @@ export default function MessagesPage() {
   // Auto-scroll to bottom
   useEffect(() => {
     const isNewChat = activeChatRef.current !== activeChatId;
+    const isInitialMessageLoad = messages.length > 0 && previousMessagesLength.current === 0;
     
     if (isNewChat && messages.length > 0) {
-      // Instant scroll when opening a chat
+      // Instant scroll when opening a chat if cache was already present
       activeChatRef.current = activeChatId;
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTo({
@@ -54,11 +55,20 @@ export default function MessagesPage() {
         });
       }
     } else if (!isNewChat) {
-      // Smooth scroll for new messages in current chat
+      // Logic for when we are already in the chat
       const isNewMessage = messages.length > previousMessagesLength.current;
       const isNewPending = pendingMessages.length > previousPendingLength.current;
       
-      if (isNewMessage || isNewPending) {
+      if (isInitialMessageLoad) {
+        // If we just finished fetching the initial messages, ALWAYS snap to bottom
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: "auto"
+          });
+        }
+      } else if (isNewMessage || isNewPending) {
+        // Normal new message arrived
         if (scrollContainerRef.current) {
           // Only auto-scroll if we are somewhat near the bottom to avoid interrupting reading
           const container = scrollContainerRef.current;
