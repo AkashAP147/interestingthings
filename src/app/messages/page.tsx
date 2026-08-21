@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction } from "@/app/actions";
+import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction, uploadChunkAction, finalizeUploadAction } from "@/app/actions";
 import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -288,28 +288,59 @@ export default function MessagesPage() {
     const file = e.target.files?.[0];
     if (!file || !activeChatId) return;
     
-    if (file.type.startsWith("video/") && file.size > 5 * 1024 * 1024) {
-      alert("Videos must be smaller than 5MB to be encrypted and sent securely.");
+    if (file.type.startsWith("video/") && file.size > 25 * 1024 * 1024) {
+      alert("Videos must be smaller than 25MB.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     setIsUploading(true);
     try {
-      let base64Media = "";
       if (file.type.startsWith("image/")) {
-        base64Media = await compressImage(file);
+        const base64Media = await compressImage(file);
+        await sendOptimisticMessage("", base64Media);
       } else {
-        base64Media = await new Promise((resolve, reject) => {
+        const base64Media = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.readAsDataURL(file);
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = (err) => reject(err);
         });
+        
+        // Chunked Resumable Upload
+        const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+        const totalChunks = Math.ceil(base64Media.length / CHUNK_SIZE);
+        
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = base64Media.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          let chunkSuccess = false;
+          let attempts = 0;
+          
+          while (!chunkSuccess && attempts < 10) {
+            try {
+              const res = await uploadChunkAction(tempId, i, chunk);
+              if (res.error) throw new Error(res.error);
+              chunkSuccess = true;
+              console.log(`Uploaded chunk ${i + 1}/${totalChunks}`);
+            } catch (err) {
+              attempts++;
+              if (attempts >= 10) throw err;
+              await new Promise(r => setTimeout(r, 2000 * attempts)); // wait before retry
+            }
+          }
+        }
+        
+        const finalRes = await finalizeUploadAction(tempId, totalChunks);
+        if (finalRes.success && finalRes.base64Media) {
+          await sendOptimisticMessage("", finalRes.base64Media);
+        } else {
+          throw new Error("Finalize failed");
+        }
       }
-      await sendOptimisticMessage("", base64Media);
     } catch (err) {
-      console.error("Failed to process media");
+      console.error("Failed to process media", err);
+      alert("Failed to upload media. Please try again.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

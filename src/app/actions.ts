@@ -957,3 +957,41 @@ export async function markChatsDeliveredAction(chatIds: string[]) {
   }
   return { success: true };
 }
+
+export async function uploadChunkAction(tempId: string, chunkIndex: number, chunkData: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  await database.ref(`uploads/${tempId}/${chunkIndex}`).set(chunkData);
+  
+  return { success: true };
+}
+
+export async function finalizeUploadAction(tempId: string, totalChunks: number) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  
+  // Read all chunks
+  const snapshot = await database.ref(`uploads/${tempId}`).once('value');
+  const chunks = snapshot.val();
+  
+  if (!chunks) return { success: false, error: "No chunks found" };
+  
+  let fullBase64 = "";
+  for (let i = 0; i < totalChunks; i++) {
+    if (!chunks[i]) {
+      return { success: false, error: `Missing chunk ${i}` };
+    }
+    fullBase64 += chunks[i];
+  }
+  
+  // Clean up chunks to save space
+  await database.ref(`uploads/${tempId}`).remove();
+  
+  return { success: true, base64Media: fullBase64 };
+}
