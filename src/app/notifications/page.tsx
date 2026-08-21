@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNotificationsAction, markNotificationsReadAction, updateUserLocationAction, getFriendSuggestionsAction } from "@/app/actions";
-import { Bell, Sparkles, User as UserIcon, Loader2, MessageSquare, MapPin, Users, Navigation } from "lucide-react";
+import { Bell, Sparkles, User as UserIcon, Loader2, MessageSquare, MapPin, Users, Navigation, ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -108,24 +108,9 @@ export default function NotificationsPage() {
               <Users className="w-5 h-5 text-purple" />
               Suggested Friends
             </h2>
-            {!locationEnabled && (
-              <button 
-                onClick={requestLocation}
-                disabled={isLoadingSuggestions}
-                className="flex items-center gap-2 bg-purple text-white px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-purple-bright transition-colors"
-              >
-                {isLoadingSuggestions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
-                Find Nearby
-              </button>
-            )}
           </div>
           
-          {!locationEnabled && suggestions.length === 0 ? (
-            <div className="text-sm text-gray-text flex items-center gap-2 p-4 bg-white dark:bg-navy-dark rounded-xl border border-dashed border-purple-light/30">
-              <MapPin className="w-5 h-5 text-purple/50" />
-              Enable location to find interesting people within 60km of you, or connect based on mutuals!
-            </div>
-          ) : suggestions.length === 0 ? (
+          {suggestions.length === 0 ? (
              <p className="text-sm text-gray-text italic">No suggestions right now. Try following more people!</p>
           ) : (
             <div className="flex overflow-x-auto gap-4 pb-2 minimal-scrollbar">
@@ -174,6 +159,8 @@ export default function NotificationsPage() {
                   <div className="p-3 rounded-full bg-purple-light/20 text-purple shrink-0 mt-1">
                     {notif.type === 'follow' ? <UserIcon className="w-5 h-5" /> : 
                      notif.type === 'message' ? <MessageSquare className="w-5 h-5" /> : 
+                     notif.type === 'post' ? <ImageIcon className="w-5 h-5" /> :
+                     notif.type === 'suggestion' ? <MapPin className="w-5 h-5" /> :
                      <Sparkles className="w-5 h-5" />}
                   </div>
                   <div className="flex-1">
@@ -182,7 +169,7 @@ export default function NotificationsPage() {
                         <span 
                           onClick={(e) => {
                             e.preventDefault();
-                            router.push(`/profile/${notif.actorId}`);
+                            router.push(`/profile/${notif.actorUsername || notif.actorId}`);
                           }}
                           className="font-bold hover:text-purple transition-colors cursor-pointer"
                         >
@@ -193,6 +180,8 @@ export default function NotificationsPage() {
                       )}
                       {notif.type === 'follow' ? " started following you." : 
                        notif.type === 'message' ? " sent you a new message." : 
+                       notif.type === 'post' ? " posted a post today" :
+                       notif.type === 'suggestion' ? " is nearby! Say hello." :
                        " interacted with you."}
                     </p>
                     <span className="text-sm text-gray-text mt-2 block font-medium">

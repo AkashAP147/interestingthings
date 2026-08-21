@@ -7,6 +7,8 @@ import { incrementDiscoveryViews } from "@/lib/db";
 import { categories } from "@/lib/categories";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { DiscoveryActions } from "@/components/DiscoveryActions";
+import { getCurrentUserAction } from "@/app/actions";
 import type { Metadata } from "next";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -47,6 +49,9 @@ export default async function DiscoveryDetailPage({
   if (!discovery) {
     notFound();
   }
+
+  const currentUser = await getCurrentUserAction();
+  const initialLiked = currentUser ? (currentUser.likes || []).includes(discovery.id) : false;
 
   await incrementDiscoveryViews(discovery.id);
 
@@ -95,12 +100,12 @@ export default async function DiscoveryDetailPage({
             <a href={discovery.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-purple text-white px-6 py-3 rounded-full font-semibold hover:bg-purple-bright transition-colors shadow-sm">
               Visit Website <ExternalLink className="h-4 w-4" />
             </a>
-            <button className="inline-flex items-center gap-2 bg-purple-light text-purple px-6 py-3 rounded-full font-semibold hover:bg-purple-light/80 transition-colors shadow-sm">
-              <Heart className="h-4 w-4" /> Save ({discovery.saves})
-            </button>
-            <button className="inline-flex items-center gap-2 bg-gray-100 dark:bg-navy-deep text-navy-dark dark:text-white px-6 py-3 rounded-full font-semibold hover:bg-gray-200 dark:hover:bg-navy-deep/80 transition-colors shadow-sm">
-              <Share className="h-4 w-4" /> Share
-            </button>
+            <DiscoveryActions 
+              discoveryId={discovery.id} 
+              initialSaves={discovery.saves} 
+              initialLiked={initialLiked} 
+              slug={discovery.slug} 
+            />
           </div>
 
           <div className="prose prose-lg dark:prose-invert max-w-none">

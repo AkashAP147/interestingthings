@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getChatsAction } from "@/app/actions";
+import { getChatsAction, updateUserLocationAction, getNotificationsAction } from "@/app/actions";
 import { decryptPayload } from "@/lib/e2ee";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, X } from "lucide-react";
@@ -52,12 +52,50 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const res = await getChatsAction();
+        const [res, notifsRes] = await Promise.all([
+          getChatsAction(),
+          getNotificationsAction()
+        ]);
+        
+        const lastSeenStr = localStorage.getItem(storageKey);
+        const lastSeenMessagesStr = localStorage.getItem(messagesTimeKey);
+        
+        let latestSeenTime = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
+        let newLatestTime = latestSeenTime;
+        let toastPayload: { title: string, body: string, link: string, icon?: string } | null = null;
+        
+        // 1. Check general notifications first
+        if (notifsRes.success && notifsRes.notifications) {
+          for (const notif of notifsRes.notifications) {
+            const notifTime = new Date(notif.createdAt).getTime();
+            if (notifTime > latestSeenTime && notif.actorId !== user.id) {
+              if (notifTime > newLatestTime) {
+                newLatestTime = notifTime;
+                
+                let title = "New Notification";
+                let body = "";
+                if (notif.type === 'suggestion') {
+                  title = "Nearby Friend Suggestion";
+                  body = `${notif.actorName} is nearby!`;
+                } else if (notif.type === 'post') {
+                  title = "New Post";
+                  body = `${notif.actorName} posted a post today`;
+                } else if (notif.type === 'follow') {
+                  title = "New Follower";
+                  body = `${notif.actorName} started following you.`;
+                } else if (notif.type === 'like') {
+                  title = "New Interaction";
+                  body = `${notif.actorName} liked your post.`;
+                }
+                
+                toastPayload = { title, body, link: notif.link || "/notifications" };
+              }
+            }
+          }
+        }
+
+        // 2. Check chat messages
         if (res.success && res.chats) {
-          const lastSeenStr = localStorage.getItem(storageKey);
-          const lastSeenMessagesStr = localStorage.getItem(messagesTimeKey);
-          
-          let latestSeenTime = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
           let latestMessagesTime = lastSeenMessagesStr ? new Date(lastSeenMessagesStr).getTime() : 0;
           
           let newLatestTime = latestSeenTime;
@@ -85,9 +123,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           setUnreadCount(currentUnreadCount);
 
           if (hasNewMessage && newestChat) {
-            // Update storage immediately so we don't spam
-            localStorage.setItem(storageKey, new Date(newLatestTime).toISOString());
-            
             const title = `New message from ${newestChat.otherUser?.name || 'someone'}`;
             let body = newestChat.lastMessage;
 
@@ -101,28 +136,33 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
                 }
               }
             }
-
+            
+            toastPayload = { title, body, link: "/messages", icon: newestChat.otherUser?.profilePicture || undefined };
+          }
+          
+          if (toastPayload) {
+            localStorage.setItem(storageKey, new Date(newLatestTime).toISOString());
+            
             // 1. Native Browser Notification
             if ("Notification" in window && Notification.permission === "granted") {
-              const notification = new Notification(title, {
-                body,
-                icon: newestChat.otherUser?.profilePicture || "/favicon.ico",
+              const notification = new Notification(toastPayload.title, {
+                body: toastPayload.body,
+                icon: toastPayload.icon || "/favicon.ico",
               });
               notification.onclick = () => {
                 window.focus();
-                router.push("/messages");
+                router.push(toastPayload!.link);
               };
             }
 
             // 2. In-App Toast
             setToast({
               id: Math.random().toString(),
-              title,
-              body,
-              chatId: newestChat.id
+              title: toastPayload.title,
+              body: toastPayload.body,
+              chatId: toastPayload.link // piggybacking on chatId for routing
             });
 
-            // Auto-hide toast after 5s
             setTimeout(() => {
               setToast(null);
             }, 5000);
@@ -133,6 +173,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Background Location Tracking
+    let lastLocationUpdate = 0;
+    let geoWatchId: number | null = null;
+    
+    if (user && "geolocation" in navigator) {
+      geoWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const now = Date.now();
+          if (now - lastLocationUpdate > 5 * 60 * 1000) { // Max once every 5 minutes
+            lastLocationUpdate = now;
+            updateUserLocationAction(position.coords.latitude, position.coords.longitude).catch(console.error);
+          }
+        },
+        (error) => {
+          console.warn("Background location tracking failed", error);
+        },
+        { enableHighAccuracy: false, maximumAge: 60000, timeout: 30000 }
+      );
+    }
+
     // Initial check after a short delay
     const initialTimeout = setTimeout(checkMessages, 3000);
     
@@ -142,6 +202,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(interval);
+      if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
     };
   }, [user, pathname, router]);
 
@@ -159,7 +220,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             className="fixed bottom-6 right-6 z-50 flex items-start gap-4 bg-white dark:bg-navy-deep p-4 rounded-2xl shadow-2xl border border-purple-light/30 max-w-sm cursor-pointer"
             onClick={() => {
               setToast(null);
-              router.push("/messages");
+              router.push(toast.chatId); // Uses the link provided
             }}
           >
             <div className="bg-purple/10 p-2 rounded-full text-purple mt-1 shrink-0">

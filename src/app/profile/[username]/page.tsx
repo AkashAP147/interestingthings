@@ -36,9 +36,9 @@ export async function generateMetadata(props: { params: Promise<{ username: stri
 
 export default async function PublicProfilePage(props: { params: Promise<{ username: string }> }) {
   const params = await props.params;
-  const username = params.username.toLowerCase();
+  const rawIdentifier = params.username; // Use exact case for ID lookups
   
-  const targetUser = await getUserByIdentifier(username);
+  const targetUser = await getUserByIdentifier(rawIdentifier);
   if (!targetUser) notFound();
 
   const currentUser = await getCurrentUserAction();
@@ -99,7 +99,7 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
                 </>
               ) : (
                 <Link 
-                  href={`/login?redirect=/profile/${username}`}
+                  href={`/login?redirect=/profile/${rawIdentifier}`}
                   className="px-6 py-2.5 rounded-full font-semibold bg-purple text-white hover:bg-purple-bright transition-colors shadow-lg"
                 >
                   Follow

@@ -56,7 +56,7 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
     }
   };
   
-  const handleDoubleClick = () => {
+  const openSourceUrl = () => {
     if (discovery.sourceUrl) {
       window.open(discovery.sourceUrl, "_blank", "noopener,noreferrer");
     }
@@ -90,7 +90,8 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
 
   return (
     <div 
-      onDoubleClick={handleDoubleClick}
+      onDoubleClick={openSourceUrl}
+      onClick={variant === "image-only" ? openSourceUrl : undefined}
       className={`group relative flex flex-col rounded-2xl bg-white dark:bg-navy-dark shadow-sm border border-purple-light/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden cursor-pointer ${className}`}
     >
       
@@ -145,7 +146,7 @@ export function DiscoveryCard({ discovery, index, featured = false, className = 
               {new Date(discovery.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </time>
           </div>
-          <div className="group relative mt-3">
+          <div className="group mt-3">
             <h3 className="font-heading text-xl font-semibold leading-6 text-navy-dark dark:text-white group-hover:text-purple transition-colors">
               <Link href={`/discover/${discovery.slug}`}>
                 <span className="absolute inset-0" />

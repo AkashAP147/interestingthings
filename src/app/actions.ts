@@ -35,22 +35,24 @@ export async function getUserEncryptedPrivateKeyAction(uid: string) {
 }
 
 export async function getNotificationsAction() {
-  const { getNotifications, getUserById } = await import("@/lib/user-db");
+  const { getNotifications, readUsersDB } = await import("@/lib/user-db");
   const cookieStore = await cookies();
   const userId = cookieStore.get("auth_user")?.value;
   if (!userId) return { success: false, notifications: [] };
   
   const notifications = (await getNotifications(userId)).filter((n: any) => n.type !== 'message');
   
-  const enriched = await Promise.all(notifications.map(async (n: any) => {
+  const allUsers = await readUsersDB();
+  
+  const enriched = notifications.map((n: any) => {
     if (n.actorId) {
-       const actor = await getUserById(n.actorId);
+       const actor = allUsers.find(u => u.id === n.actorId);
        if (actor) {
-         return { ...n, actorName: actor.name || actor.username || "Someone" };
+         return { ...n, actorName: actor.name || actor.username || "Someone", actorUsername: actor.username || null };
        }
     }
     return { ...n, actorName: "Someone" };
-  }));
+  });
   
   return { success: true, notifications: enriched };
 }
@@ -724,7 +726,27 @@ export async function createPostAction(formData: FormData) {
     likedBy: []
   };
 
-  await database.ref(`posts/${currentUserId}`).push(newPost);
+  const postRef = await database.ref(`posts/${currentUserId}`).push(newPost);
+  const postId = postRef.key;
+  
+  // Notify followers
+  const { getUserById, createNotification } = await import("@/lib/user-db");
+  const currentUser = await getUserById(currentUserId);
+  if (currentUser && currentUser.followers && currentUser.followers.length > 0) {
+    const timestamp = new Date().toISOString();
+    await Promise.all(currentUser.followers.map(async (followerId) => {
+      await createNotification({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        userId: followerId,
+        actorId: currentUserId,
+        type: 'post',
+        link: `/profile/${currentUserId}`,
+        read: false,
+        createdAt: timestamp,
+        discoveryId: postId || undefined
+      } as any);
+    }));
+  }
   
   revalidatePath("/profile");
   return { success: true };
@@ -896,7 +918,7 @@ export async function sharePostToFollowersAction(authorId: string, postId: strin
 }
 
 export async function getUserConnectionsAction(userId: string) {
-  const { getUserById } = await import("@/lib/user-db");
+  const { getUserById, readUsersDB } = await import("@/lib/user-db");
   
   const user = await getUserById(userId);
   if (!user) return { success: false, error: "User not found" };
@@ -904,7 +926,11 @@ export async function getUserConnectionsAction(userId: string) {
   const followersList = user.followers || [];
   const followingList = user.following || [];
 
-  const followers = (await Promise.all(followersList.map(id => getUserById(id))))
+  // Optimize: fetch all users once instead of N+1 queries
+  const allUsers = await readUsersDB();
+
+  const followers = followersList
+    .map(id => allUsers.find(u => u.id === id))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
     .map(u => ({ 
       id: u.id, 
@@ -913,7 +939,8 @@ export async function getUserConnectionsAction(userId: string) {
       profilePicture: u.profilePicture || null 
     }));
     
-  const following = (await Promise.all(followingList.map(id => getUserById(id))))
+  const following = followingList
+    .map(id => allUsers.find(u => u.id === id))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
     .map(u => ({ 
       id: u.id, 
@@ -983,8 +1010,37 @@ export async function updateUserLocationAction(lat: number, lng: number) {
   const currentUserId = cookieStore.get("auth_user")?.value;
   if (!currentUserId) return { success: false, error: "Unauthorized" };
 
-  const { updateUserLocation } = await import("@/lib/user-db");
+  const { updateUserLocation, getFriendSuggestions, getUserById, createNotification, updateNotifiedSuggestions } = await import("@/lib/user-db");
   await updateUserLocation(currentUserId, lat, lng);
+  
+  // Fetch suggestions and create notifications for new ones
+  const suggestions = await getFriendSuggestions(currentUserId);
+  const currentUser = await getUserById(currentUserId);
+  if (currentUser) {
+    const notified = currentUser.notifiedSuggestions || [];
+    const newSuggestions = suggestions.filter((s: any) => !notified.includes(s.user.id));
+    
+    if (newSuggestions.length > 0) {
+      const timestamp = new Date().toISOString();
+      const newlyNotified: string[] = [];
+      
+      await Promise.all(newSuggestions.map(async (s: any) => {
+        await createNotification({
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          userId: currentUserId,
+          actorId: s.user.id,
+          type: 'suggestion',
+          link: `/profile/${s.user.username || s.user.id}`,
+          read: false,
+          createdAt: timestamp
+        } as any);
+        newlyNotified.push(s.user.id);
+      }));
+      
+      await updateNotifiedSuggestions(currentUserId, [...notified, ...newlyNotified]);
+    }
+  }
+  
   return { success: true };
 }
 

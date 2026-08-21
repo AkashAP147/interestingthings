@@ -1,4 +1,5 @@
 import { database } from './firebase';
+import { cache } from 'react';
 
 export interface User {
   id: string;
@@ -8,6 +9,7 @@ export interface User {
   shares: string[]; // array of discovery IDs
   followers?: string[]; // array of user IDs
   following?: string[]; // array of user IDs
+  notifiedSuggestions?: string[]; // array of user IDs already notified about
   joinedAt: string;
   passwordHash?: string;
   name?: string;
@@ -33,7 +35,7 @@ export interface Notification {
   id: string;
   userId: string;
   actorId: string;
-  type: 'follow' | 'like';
+  type: 'follow' | 'like' | 'message' | 'post' | 'suggestion';
   read: boolean;
   createdAt: string;
   discoveryId?: string;
@@ -41,7 +43,7 @@ export interface Notification {
 
 const COLLECTION = 'users';
 
-export async function readUsersDB(): Promise<User[]> {
+export const readUsersDB = cache(async (): Promise<User[]> => {
   try {
     const snapshot = await database.ref(COLLECTION).once('value');
     const data = snapshot.val() || {};
@@ -50,7 +52,7 @@ export async function readUsersDB(): Promise<User[]> {
     console.error("Failed to read users DB:", error);
     return [];
   }
-}
+});
 
 export async function writeUsersDB(users: User[]): Promise<void> {
   // Not used in Firebase implementation
@@ -79,6 +81,14 @@ export async function findOrCreateUser(contact: string): Promise<User> {
 
 export async function getUserByIdentifier(identifier: string): Promise<User | null> {
   try {
+    // 1. Try by exact user ID
+    const docRef = database.ref(`${COLLECTION}/${identifier}`);
+    const docSnap = await docRef.once('value');
+    if (docSnap.exists()) {
+      return docSnap.val() as User;
+    }
+
+    // 2. Try by contact
     let snapshot = await database.ref(COLLECTION).orderByChild('contact').equalTo(identifier).limitToFirst(1).once('value');
     let data = snapshot.val();
     if (data) {
@@ -133,6 +143,7 @@ export async function syncFirebaseUser(uid: string, contact: string, name?: stri
     activityDates: [],
     streakCount: 0,
     curiosityPoints: 10,
+    notifiedSuggestions: []
   };
   
   if (username) newUser.username = username;
@@ -152,16 +163,19 @@ export async function verifyUser(id: string): Promise<User | null> {
   return updatedSnap.val() as User;
 }
 
-export async function getUserById(id: string): Promise<User | null> {
+export const getUserById = cache(async (id: string): Promise<User | null> => {
   try {
-    const docSnap = await database.ref(`${COLLECTION}/${id}`).once('value');
-    if (!docSnap.exists()) return null;
-    return docSnap.val() as User;
+    const docRef = database.ref(`${COLLECTION}/${id}`);
+    const docSnap = await docRef.once('value');
+    if (docSnap.exists()) {
+      return docSnap.val() as User;
+    }
+    return null;
   } catch (error) {
     console.error("Error in getUserById", error);
     return null;
   }
-}
+});
 
 export async function isUsernameTaken(username: string, currentUserId: string): Promise<boolean> {
   if (!username) return false;
@@ -435,4 +449,12 @@ export async function getFriendSuggestions(userId: string): Promise<FriendSugges
 
   // Sort by score descending and return top 10
   return suggestions.sort((a, b) => b.score - a.score).slice(0, 10);
+}
+
+export async function updateNotifiedSuggestions(userId: string, notifiedIds: string[]) {
+  try {
+    await database.ref(`${COLLECTION}/${userId}/notifiedSuggestions`).set(notifiedIds);
+  } catch (error) {
+    console.error("Failed to update notified suggestions", error);
+  }
 }
