@@ -68,16 +68,18 @@ export default function MessagesPage() {
           });
         }
       } else if (isNewMessage || isNewPending) {
-        // Normal new message arrived
+        // Normal new message arrived or user sent a message
         if (scrollContainerRef.current) {
-          // Only auto-scroll if we are somewhat near the bottom to avoid interrupting reading
           const container = scrollContainerRef.current;
           const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
+          // If a pending message transitioned to a real message, we want to ensure we scroll
+          const isPendingTransition = isNewMessage && pendingMessages.length < previousPendingLength.current;
           
-          if (isNearBottom || isNewPending) {
+          if (isNearBottom || isNewPending || isPendingTransition) {
+            // Use auto (instant) if it's a pending transition to avoid animation jank
             container.scrollTo({
               top: container.scrollHeight,
-              behavior: "smooth"
+              behavior: isPendingTransition ? "auto" : "smooth"
             });
           }
         }
