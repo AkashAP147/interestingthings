@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction, uploadChunkAction, finalizeUploadAction } from "@/app/actions";
+import { startChatAction, sendMessageAction, getChatsAction, getMessagesAction, markChatsDeliveredAction } from "@/app/actions";
 import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -11,11 +11,9 @@ import { useSearchParams } from "next/navigation";
 import { MediaPicker } from '@/components/MediaPicker';
 import { encryptPayload, decryptPayload, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Html5Qrcode } from 'html5-qrcode';
-import { useUploads } from "@/contexts/UploadContext";
 
 export default function MessagesPage() {
   const { user } = useAuth();
-  const { startUpload } = useUploads();
   const searchParams = useSearchParams();
   const [chats, setChats] = useState<any[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -290,8 +288,8 @@ export default function MessagesPage() {
     const file = e.target.files?.[0];
     if (!file || !activeChatId) return;
     
-    if (file.type.startsWith("video/") && file.size > 25 * 1024 * 1024) {
-      alert("Videos must be smaller than 25MB.");
+    if (file.type.startsWith("video/")) {
+      alert("Video uploads have been disabled.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -301,17 +299,6 @@ export default function MessagesPage() {
         setIsUploading(true);
         const base64Media = await compressImage(file);
         await sendOptimisticMessage("", base64Media);
-      } else {
-        // Video uses the background upload manager
-        const activeChatOtherUser = chats.find(c => c.id === activeChatId)?.otherUser;
-        const recipientPubKey = activeChatOtherUser?.publicKey || null;
-        const myPubKey = (user as any)?.publicKey || localStorage.getItem(`pubKey_${user?.id}`) || null;
-        
-        // Pass it to the global context to upload in background
-        startUpload(file, activeChatId, myPubKey, recipientPubKey);
-        
-        // Let the user know it's happening
-        alert("Video is uploading in the background. You can safely explore other pages.");
       }
     } catch (err) {
       console.error("Failed to process media", err);
