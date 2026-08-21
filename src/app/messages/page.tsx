@@ -23,6 +23,8 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [searchUsername, setSearchUsername] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -178,9 +180,21 @@ export default function MessagesPage() {
       setIsLoadingMessages(false);
     });
 
+    // Typing listener
+    const otherUserId = chats.find(c => c.id === activeChatId)?.participants.find((p: string) => p !== user.id);
+    let typingRef: any = null;
+    let typingListener: any = null;
+    if (otherUserId) {
+      typingRef = ref(database, `typing/${activeChatId}/${otherUserId}`);
+      typingListener = onValue(typingRef, (snapshot) => {
+        if (isActive) setIsOtherTyping(!!snapshot.val());
+      });
+    }
+
     return () => {
       isActive = false;
       off(messagesRef, 'value', listener);
+      if (typingRef && typingListener) off(typingRef, 'value', typingListener);
     };
   }, [activeChatId, user]);
 
@@ -328,13 +342,36 @@ export default function MessagesPage() {
     }
   };
 
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    
+    if (activeChatId && user) {
+      const myTypingRef = ref(database, `typing/${activeChatId}/${user.id}`);
+      import('firebase/database').then(({ set }) => {
+        set(myTypingRef, true).catch(console.error);
+        
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          set(myTypingRef, false).catch(console.error);
+        }, 2000);
+      });
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeChatId) return;
+    if (!newMessage.trim() && !isUploading) return;
     
     const text = newMessage;
     setNewMessage(""); // Clear input instantly
     setShowEmojiPicker(false);
+    
+    // Clear typing indicator immediately
+    if (activeChatId && user) {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      const myTypingRef = ref(database, `typing/${activeChatId}/${user.id}`);
+      import('firebase/database').then(({ set }) => set(myTypingRef, false));
+    }
     
     await sendOptimisticMessage(text, null);
   };
@@ -606,7 +643,17 @@ export default function MessagesPage() {
                   <p>Send a message to start the conversation!</p>
                 </div>
               ) : (
-                [...messages, ...pendingMessages.filter(pm => 
+                <>
+                {isOtherTyping && (
+                  <div className="flex justify-start mt-6 mb-2">
+                    <div className="bg-white dark:bg-navy-dark border border-purple-light/20 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1.5 w-16 h-10">
+                      <motion.div className="w-1.5 h-1.5 bg-gray-400 rounded-full" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} />
+                      <motion.div className="w-1.5 h-1.5 bg-gray-400 rounded-full" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} />
+                      <motion.div className="w-1.5 h-1.5 bg-gray-400 rounded-full" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} />
+                    </div>
+                  </div>
+                )}
+                {[...messages, ...pendingMessages.filter(pm => 
                   // Don't render pending messages that have already been fetched by background polling
                   !messages.some(m => m.senderId === pm.senderId && m.text === pm.text && m.imageUrl === pm.imageUrl)
                 )].reverse().map((msg, i, arr) => {
@@ -689,7 +736,8 @@ export default function MessagesPage() {
                     )}
                   </div>
                   );
-                })
+                })}
+                </>
               )}
             </div>
             
@@ -730,7 +778,7 @@ export default function MessagesPage() {
                   <input
                     type="text"
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    onChange={handleTyping}
                     placeholder="Type a message..."
                     className="flex-1 bg-transparent text-navy-dark dark:text-white px-2 py-2 text-[16px] focus:outline-none min-w-0 placeholder-gray-400"
                   />
