@@ -430,12 +430,12 @@ export async function startChatAction(targetUsername: string) {
   return { success: true, chatId };
 }
 
-export async function sendMessageAction(chatId: string, text?: string, imageUrl?: string, payload?: any) {
+export async function sendMessageAction(chatId: string, text?: string, imageUrl?: string, payload?: any, sharedPost?: any) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
   if (!currentUserId) return { success: false, error: "Unauthorized" };
 
-  if (!text?.trim() && !imageUrl && !payload) return { success: false, error: "Empty message" };
+  if (!text?.trim() && !imageUrl && !payload && !sharedPost) return { success: false, error: "Empty message" };
 
   const { database } = await import("@/lib/firebase");
   const chatRef = database.ref(`chats/${chatId}`);
@@ -455,6 +455,7 @@ export async function sendMessageAction(chatId: string, text?: string, imageUrl?
     text: text?.trim() || null,
     imageUrl: imageUrl || null,
     payload: payload || null,
+    sharedPost: sharedPost || null,
     createdAt: timestamp,
     status: "sent"
   });
@@ -955,7 +956,8 @@ export async function getUserConnectionsAction(userId: string) {
       id: u.id, 
       username: u.username || null, 
       name: u.name || null, 
-      profilePicture: u.profilePicture || null 
+      profilePicture: u.profilePicture || null,
+      publicKey: (u as any).publicKey || null
     }));
     
   const following = followingList
@@ -965,7 +967,8 @@ export async function getUserConnectionsAction(userId: string) {
       id: u.id, 
       username: u.username || null, 
       name: u.name || null, 
-      profilePicture: u.profilePicture || null 
+      profilePicture: u.profilePicture || null,
+      publicKey: (u as any).publicKey || null
     }));
 
   return { success: true, followers, following };

@@ -135,7 +135,7 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
 
         {currentTab === 'gallery' ? (
           <div className="py-8">
-            <GalleryTab initialPosts={userPosts} />
+            <GalleryTab initialPosts={userPosts} profileName={user.name || user.username} />
           </div>
         ) : currentTab === 'collections' ? (
           <div className="py-24 text-center text-gray-text">

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPostAction, updatePostVisibilityAction, togglePostLikeAction, addPostCommentAction, getPostCommentsAction, sharePostToFollowersAction } from "@/app/actions";
 import { Plus, Image as ImageIcon, Loader2, X, User as UserIcon, Heart, MessageCircle, Share2, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { SharePostModal } from "@/components/SharePostModal";
 
 interface Post {
   id: string;
@@ -15,7 +16,7 @@ interface Post {
   likedBy?: string[];
 }
 
-export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: Post[], readOnly?: boolean }) {
+export function GalleryTab({ initialPosts, readOnly = false, profileName }: { initialPosts: Post[], readOnly?: boolean, profileName?: string }) {
   const { user } = useAuth();
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [isUploading, setIsUploading] = useState(false);
@@ -34,7 +35,7 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
   const [newComment, setNewComment] = useState("");
   const [isLiking, setIsLiking] = useState(false);
   const [isCommenting, setIsCommenting] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
+  const [sharePostItem, setSharePostItem] = useState<any>(null);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
 
   useEffect(() => {
@@ -189,23 +190,15 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
     }
   };
 
-  const handleShare = async (post: Post) => {
-    if (!user || isSharing) return;
-    if (confirm("Share this post to all your followers via direct message?")) {
-      setIsSharing(true);
-      try {
-        const res = await sharePostToFollowersAction(post.userId || user.id, post.id);
-        if (res.success) {
-          alert(`Shared to ${res.sharedCount} followers!`);
-        } else {
-          alert(res.error || "Failed to share post");
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsSharing(false);
-      }
-    }
+  const handleShare = (post: Post) => {
+    if (!user) return;
+    setSharePostItem({
+      id: post.id,
+      text: post.caption,
+      imageUrl: post.imageUrls?.[0],
+      authorName: profileName || user.name || "Unknown User",
+      authorId: post.userId || user.id
+    });
   };
 
   const handleUpdateVisibility = async (postId: string, newVisibility: "public" | "private" | "friends") => {
@@ -475,7 +468,6 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
                     </button>
                     <button 
                       onClick={() => handleShare(viewingPost)}
-                      disabled={isSharing}
                       className="flex items-center gap-2 group transition-colors ml-auto"
                     >
                       <Share2 className="w-5 h-5 text-gray-text group-hover:text-purple" />
@@ -546,6 +538,14 @@ export function GalleryTab({ initialPosts, readOnly = false }: { initialPosts: P
             </div>
           </div>
         </div>
+      )}
+
+      {sharePostItem && (
+        <SharePostModal 
+          isOpen={true} 
+          onClose={() => setSharePostItem(null)} 
+          post={sharePostItem} 
+        />
       )}
     </div>
   );

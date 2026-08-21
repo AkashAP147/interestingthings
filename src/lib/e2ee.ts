@@ -165,11 +165,10 @@ export async function decryptMessage(
 
 // Multi-Recipient E2EE Protocol
 export async function encryptPayload(
-  text: string,
-  imageUrl: string | null,
+  payloadObj: any,
   publicKeysBase64: string[]
 ) {
-  const payloadStr = JSON.stringify({ text, imageUrl });
+  const payloadStr = JSON.stringify(payloadObj);
   const encodedText = getMessageEncoding(payloadStr);
 
   const aesKey = await window.crypto.subtle.generateKey(

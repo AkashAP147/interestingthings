@@ -160,7 +160,7 @@ export default function MessagesPage() {
           const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
           const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
           if (decrypted) {
-            return { ...msg, text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
+            return { ...msg, ...decrypted, isDecrypted: true };
           } else {
             return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
           }
@@ -389,7 +389,7 @@ export default function MessagesPage() {
     
     if (recipientPubKey && myPubKey) {
       try {
-        finalPayload = await encryptPayload(text, imageUrl, [myPubKey, recipientPubKey]);
+        finalPayload = await encryptPayload({ text, imageUrl }, [myPubKey, recipientPubKey]);
         finalPlainText = "";
         finalImageUrl = null;
       } catch(err) {
@@ -680,6 +680,13 @@ export default function MessagesPage() {
                   
                   return (
                     <div key={msg.id} className="flex flex-col">
+                      {showDateHeader && (
+                        <div className="flex justify-center w-full my-6 mb-2">
+                          <span className="bg-purple-light/10 dark:bg-navy-dark text-purple dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            {formatDateHeader(msg.createdAt)}
+                          </span>
+                        </div>
+                      )}
                       <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${showAvatar ? 'mt-6' : 'mt-1'} group`}>
                         {!isMine && showAvatar && (
                         <Link href={`/profile/${activeChatOtherUser?.username || activeChatOtherUser?.id}`} className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-light to-blue mr-2 shrink-0 self-end mb-1 flex items-center justify-center relative overflow-hidden hover:ring-2 ring-purple transition-all shadow-sm">
@@ -713,6 +720,27 @@ export default function MessagesPage() {
                             )}
                           </div>
                         )}
+                        {msg.sharedPost && !msg.isDeleted && (
+                          <div className="mb-2 w-full max-w-[240px] overflow-hidden rounded-xl bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 p-2 cursor-pointer transition-transform hover:scale-[1.02]"
+                               onClick={() => window.open(msg.sharedPost.isDiscovery ? `/discover/${msg.sharedPost.id}` : `/profile/${msg.sharedPost.authorId}?post=${msg.sharedPost.id}`, '_blank')}>
+                            {msg.sharedPost.imageUrl && (
+                              <div className="relative w-full h-32 mb-2 rounded-lg overflow-hidden bg-black/10">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={msg.sharedPost.imageUrl} alt="Shared Post" className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            <div className="px-1 pb-1">
+                              <p className={`font-semibold text-sm line-clamp-1 ${!isMine ? 'text-white' : 'text-navy-deep dark:text-white'}`}>
+                                {msg.sharedPost.authorName}'s Post
+                              </p>
+                              {msg.sharedPost.text && (
+                                <p className={`text-xs opacity-80 line-clamp-2 mt-1 ${!isMine ? 'text-white/90' : 'text-gray-600 dark:text-gray-300'}`}>
+                                  {msg.sharedPost.text}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {msg.text && (
                           <p className={`break-words whitespace-pre-wrap ${msg.isDeleted ? (!isMine ? 'italic text-white/70' : 'italic text-gray-400') : ''}`}>
                             {msg.text}
@@ -727,13 +755,6 @@ export default function MessagesPage() {
                         </span>
                       </div>
                     </div>
-                    {showDateHeader && (
-                      <div className="flex justify-center w-full my-6 mb-2">
-                        <span className="bg-purple-light/10 dark:bg-navy-dark text-purple dark:text-gray-300 text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                          {formatDateHeader(msg.createdAt)}
-                        </span>
-                      </div>
-                    )}
                   </div>
                   );
                 })}

@@ -167,7 +167,7 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
                 <p className="text-lg">No visible posts.</p>
               </div>
             ) : (
-              <GalleryTab initialPosts={posts} readOnly={true} />
+              <GalleryTab initialPosts={posts} readOnly={true} profileName={targetUser.name || targetUser.username} />
             )}
           </div>
         </div>
