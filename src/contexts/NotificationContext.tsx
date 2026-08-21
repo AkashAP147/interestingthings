@@ -61,7 +61,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         const lastSeenMessagesStr = localStorage.getItem(messagesTimeKey);
         
         let latestSeenTime = lastSeenStr ? new Date(lastSeenStr).getTime() : 0;
-        let newLatestTime = latestSeenTime;
+        let currentMaxTime = latestSeenTime;
         let toastPayload: { title: string, body: string, link: string, icon?: string } | null = null;
         
         // 1. Check general notifications first
@@ -69,8 +69,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           for (const notif of notifsRes.notifications) {
             const notifTime = new Date(notif.createdAt).getTime();
             if (notifTime > latestSeenTime && notif.actorId !== user.id) {
-              if (notifTime > newLatestTime) {
-                newLatestTime = notifTime;
+              if (notifTime > currentMaxTime) {
+                currentMaxTime = notifTime;
                 
                 let title = "New Notification";
                 let body = "";
@@ -98,7 +98,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         if (res.success && res.chats) {
           let latestMessagesTime = lastSeenMessagesStr ? new Date(lastSeenMessagesStr).getTime() : 0;
           
-          let newLatestTime = latestSeenTime;
           let hasNewMessage = false;
           let newestChat = null;
           let currentUnreadCount = 0;
@@ -113,8 +112,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
             if (chatTime > latestSeenTime && chat.lastMessageSenderId !== user.id) {
               hasNewMessage = true;
-              if (chatTime > newLatestTime) {
-                newLatestTime = chatTime;
+              if (chatTime > currentMaxTime) {
+                currentMaxTime = chatTime;
                 newestChat = chat;
               }
             }
@@ -141,7 +140,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           }
           
           if (toastPayload) {
-            localStorage.setItem(storageKey, new Date(newLatestTime).toISOString());
+            localStorage.setItem(storageKey, new Date(currentMaxTime).toISOString());
             
             // 1. Native Browser Notification
             if ("Notification" in window && Notification.permission === "granted") {

@@ -1,10 +1,10 @@
 import { getUserByIdentifier } from "@/lib/user-db";
-import { getCurrentUserAction, getUserConnectionsAction } from "@/app/actions";
+import { getCurrentUserAction } from "@/app/actions";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import FollowButton from "@/components/profile/FollowButton";
 import Link from "next/link";
-import { getUserPostsAction } from "@/app/actions";
+import { getCachedUserPostsAction, getCachedUserConnectionsAction } from "@/app/actions";
 import { User as UserIcon, Calendar, Activity, Star } from "lucide-react";
 import { GalleryTab } from "@/components/GalleryTab";
 import ProfileStatsModal from "@/components/profile/ProfileStatsModal";
@@ -47,16 +47,21 @@ export default async function PublicProfilePage(props: { params: Promise<{ usern
   const isFollowing = currentUser?.following?.includes(targetUser.id) || false;
   const isFollower = targetUser.followers?.includes(currentUser?.id || "") || false;
   
+  const [connectionsRes, postsRes] = await Promise.all([
+    getCachedUserConnectionsAction(targetUser.id),
+    getCachedUserPostsAction(targetUser.id, currentUser?.id)
+  ]);
+  
   // Fetch full user objects for connections
-  const { followers = [], following = [] } = await getUserConnectionsAction(targetUser.id);
-  const friends = followers.filter(f => following.some(fw => fw.id === f.id));
+  const followers = connectionsRes.followers || [];
+  const following = connectionsRes.following || [];
+  const friends = followers.filter((f: any) => following.some((fw: any) => fw.id === f.id));
   
   const followerCount = followers.length;
   const followingCount = following.length;
   
   const joinDate = new Date(targetUser.joinedAt || Date.now()).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-  const postsRes = await getUserPostsAction(targetUser.id, currentUser?.id);
   const posts = postsRes.success ? postsRes.posts : [];
 
   return (

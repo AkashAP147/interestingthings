@@ -2,14 +2,15 @@
 
 import { updateDiscoveryStatus, deleteDiscovery } from "@/lib/db";
 import { findOrCreateUser, verifyUser, toggleLike, getUserByIdentifier, isUsernameTaken, updateUserProfile } from "@/lib/user-db";
-import { revalidatePath, revalidateTag, updateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
+import { unstable_cache } from "next/cache";
 import { auth, database } from "@/lib/firebase";
 import crypto from "crypto";
 
 export async function approveDiscovery(id: string) {
   await updateDiscoveryStatus(id, "published");
-  updateTag("discoveries-v2");
+  revalidateTag("discoveries-v2" as any, undefined as any);
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -18,7 +19,7 @@ export async function approveDiscovery(id: string) {
 
 export async function rejectDiscovery(id: string) {
   await deleteDiscovery(id);
-  updateTag("discoveries-v2");
+  revalidateTag("discoveries-v2" as any, undefined as any);
   revalidatePath("/admin");
   return { success: true };
 }
@@ -74,7 +75,7 @@ export async function getRandomDiscoveryAction() {
 
 export async function deleteDiscoveryAction(id: string) {
   await deleteDiscovery(id);
-  updateTag("discoveries-v2");
+  revalidateTag("discoveries-v2" as any, undefined as any);
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -157,6 +158,7 @@ export async function toggleFollowAction(targetUserId: string) {
   const result = await toggleFollow(currentUserId, targetUserId);
   
   // Revalidate paths where follow state might be shown
+  revalidateTag('connections' as any, undefined as any);
   revalidatePath("/");
   revalidatePath("/profile");
   revalidatePath(`/profile/[username]`, "page");
@@ -199,7 +201,7 @@ export async function manualAddDiscoveryAction(formData: FormData) {
     return { success: false, error: "This URL has already been added." };
   }
   
-  updateTag("discoveries-v2");
+  revalidateTag("discoveries-v2" as any, undefined as any);
   revalidatePath("/");
   revalidatePath("/admin");
   revalidatePath("/discover");
@@ -764,6 +766,14 @@ export async function updatePostVisibilityAction(postId: string, visibility: "pu
   return { success: true };
 }
 
+export const getCachedUserPostsAction = unstable_cache(
+  async (targetUserId: string, viewerId?: string) => {
+    return getUserPostsAction(targetUserId, viewerId);
+  },
+  ['user-posts'],
+  { tags: ['posts'], revalidate: 3600 } // 1 hour cache, revalidated on mutation
+);
+
 export async function getUserPostsAction(targetUserId: string, viewerId?: string) {
   const { database } = await import("@/lib/firebase");
   const { getUserById } = await import("@/lib/user-db");
@@ -833,6 +843,7 @@ export async function togglePostLikeAction(authorId: string, postId: string) {
   }
 
   revalidatePath("/profile");
+  revalidateTag('posts' as any, undefined as any);
   return { success: true, liked: isLiked };
 }
 
@@ -916,6 +927,14 @@ export async function sharePostToFollowersAction(authorId: string, postId: strin
 
   return { success: true, sharedCount: currentUser.followers.length };
 }
+
+export const getCachedUserConnectionsAction = unstable_cache(
+  async (userId: string) => {
+    return getUserConnectionsAction(userId);
+  },
+  ['user-connections'],
+  { tags: ['connections'], revalidate: 3600 } // 1 hour cache
+);
 
 export async function getUserConnectionsAction(userId: string) {
   const { getUserById, readUsersDB } = await import("@/lib/user-db");

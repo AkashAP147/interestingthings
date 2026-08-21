@@ -79,7 +79,7 @@ export async function findOrCreateUser(contact: string): Promise<User> {
   return newUser;
 }
 
-export async function getUserByIdentifier(identifier: string): Promise<User | null> {
+export const getUserByIdentifier = cache(async (identifier: string): Promise<User | null> => {
   try {
     // 1. Try by exact user ID
     const docRef = database.ref(`${COLLECTION}/${identifier}`);
@@ -109,7 +109,7 @@ export async function getUserByIdentifier(identifier: string): Promise<User | nu
     console.error("Error in getUserByIdentifier", error);
     return null;
   }
-}
+});
 
 export async function syncFirebaseUser(uid: string, contact: string, name?: string): Promise<User> {
   const docRef = database.ref(`${COLLECTION}/${uid}`);

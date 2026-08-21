@@ -1,7 +1,7 @@
 import { Flame, FolderHeart, Bookmark, Settings, User as UserIcon, Shield } from "lucide-react";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { readDB } from "@/lib/db";
-import { getCurrentUserAction, getUserConnectionsAction, getUserPostsAction } from "@/app/actions";
+import { getCurrentUserAction, getCachedUserConnectionsAction, getCachedUserPostsAction } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { EditProfileModal } from "@/components/EditProfileModal";
 import { GalleryTab } from "@/components/GalleryTab";
@@ -16,24 +16,29 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
 
   const currentTab = searchParams?.tab || "gallery";
   
+  // Parallelize data fetching
+  const [allData, postsRes, connectionsRes] = await Promise.all([
+    currentTab === "saved" ? readDB() : Promise.resolve([]),
+    currentTab === "gallery" ? getCachedUserPostsAction(user.id, user.id) : Promise.resolve({ success: false, posts: [] }),
+    getCachedUserConnectionsAction(user.id)
+  ]);
+
   let savedDiscoveries: any[] = [];
   if (currentTab === "saved") {
-    const allData = await readDB();
-    savedDiscoveries = allData.filter(d => user.likes?.includes(d.id));
+    savedDiscoveries = allData.filter((d: any) => user.likes?.includes(d.id));
   }
   
-  let userPosts = [];
-  if (currentTab === "gallery") {
-    const postsRes = await getUserPostsAction(user.id, user.id);
-    if (postsRes.success) {
-      userPosts = postsRes.posts;
-    }
+  let userPosts: any[] = [];
+  if (currentTab === "gallery" && postsRes.success) {
+    userPosts = postsRes.posts;
   }
 
   const activityDates = user.activityDates || [];
   const streakCount = user.streakCount || 0;
+  
   // Fetch full user objects for connections
-  const { followers = [], following = [] } = await getUserConnectionsAction(user.id);
+  const followers = connectionsRes.followers || [];
+  const following = connectionsRes.following || [];
   const friends = followers.filter((f: any) => following.some((fw: any) => fw.id === f.id));
   
   const followerCount = followers.length;
