@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/AuthModal";
 import { getCurrentUserAction } from "@/app/actions";
 import { NotificationProvider } from "@/contexts/NotificationContext";
+import { UploadProvider } from "@/contexts/UploadContext";
 import { Preloader } from "@/components/Preloader";
 
 const inter = Inter({
@@ -68,13 +69,15 @@ export default async function RootLayout({
       <body className={`${inter.variable} ${outfit.variable} antialiased min-h-screen flex flex-col bg-background text-foreground pt-[73px] pb-20 lg:pb-0`}>
         <AuthProvider initialUser={initialUser}>
           <NotificationProvider>
-            <Preloader />
-            <Navbar />
-            <main className="flex-grow flex flex-col">
-              {children}
-            </main>
-            <Footer />
-            <AuthModal />
+            <UploadProvider>
+              <Preloader />
+              <Navbar />
+              <main className="flex-grow flex flex-col">
+                {children}
+              </main>
+              <Footer />
+              <AuthModal />
+            </UploadProvider>
           </NotificationProvider>
         </AuthProvider>
       </body>

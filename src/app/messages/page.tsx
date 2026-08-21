@@ -11,9 +11,11 @@ import { useSearchParams } from "next/navigation";
 import { MediaPicker } from '@/components/MediaPicker';
 import { encryptPayload, decryptPayload, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Html5Qrcode } from 'html5-qrcode';
+import { useUploads } from "@/contexts/UploadContext";
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const { startUpload } = useUploads();
   const searchParams = useSearchParams();
   const [chats, setChats] = useState<any[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
@@ -294,60 +296,22 @@ export default function MessagesPage() {
       return;
     }
 
-    setIsUploading(true);
     try {
       if (file.type.startsWith("image/")) {
+        setIsUploading(true);
         const base64Media = await compressImage(file);
         await sendOptimisticMessage("", base64Media);
       } else {
-        const base64Media = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = (err) => reject(err);
-        });
+        // Video uses the background upload manager
+        const activeChatOtherUser = chats.find(c => c.id === activeChatId)?.otherUser;
+        const recipientPubKey = activeChatOtherUser?.publicKey || null;
+        const myPubKey = (user as any)?.publicKey || localStorage.getItem(`pubKey_${user?.id}`) || null;
         
-        // Chunked Resumable Upload
-        const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
-        const totalChunks = Math.ceil(base64Media.length / CHUNK_SIZE);
-        const CONCURRENCY = 4;
+        // Pass it to the global context to upload in background
+        startUpload(file, activeChatId, myPubKey, recipientPubKey);
         
-        for (let i = 0; i < totalChunks; i += CONCURRENCY) {
-          const batch = [];
-          for (let j = 0; j < CONCURRENCY && i + j < totalChunks; j++) {
-            const chunkIndex = i + j;
-            const chunk = base64Media.slice(chunkIndex * CHUNK_SIZE, (chunkIndex + 1) * CHUNK_SIZE);
-            
-            // Promise for a single chunk with retry logic
-            const uploadPromise = (async () => {
-              let chunkSuccess = false;
-              let attempts = 0;
-              while (!chunkSuccess && attempts < 5) {
-                try {
-                  const res = await uploadChunkAction(tempId, chunkIndex, chunk);
-                  if (res.error) throw new Error(res.error);
-                  chunkSuccess = true;
-                  console.log(`Uploaded chunk ${chunkIndex + 1}/${totalChunks}`);
-                } catch (err) {
-                  attempts++;
-                  if (attempts >= 5) throw err;
-                  await new Promise(r => setTimeout(r, 1500 * attempts));
-                }
-              }
-            })();
-            batch.push(uploadPromise);
-          }
-          // Wait for the current batch of 4 chunks to finish before starting the next batch
-          await Promise.all(batch);
-        }
-        
-        const finalRes = await finalizeUploadAction(tempId, totalChunks);
-        if (finalRes.success && finalRes.base64Media) {
-          await sendOptimisticMessage("", finalRes.base64Media);
-        } else {
-          throw new Error("Finalize failed");
-        }
+        // Let the user know it's happening
+        alert("Video is uploading in the background. You can safely explore other pages.");
       }
     } catch (err) {
       console.error("Failed to process media", err);
