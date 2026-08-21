@@ -161,6 +161,8 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!activeChatId || !user) return;
     
+    let isActive = true;
+    
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem(`timit_msgs_${activeChatId}_${user.id}`);
       if (cached) {
@@ -173,6 +175,8 @@ export default function MessagesPage() {
     const fetchMessages = async () => {
       try {
         const res = await getMessagesAction(activeChatId);
+        if (!isActive) return; // Abort if switched chats
+        
         if (res.success && res.messages) {
           const privKey = localStorage.getItem(`privKey_${user.id}`);
           
@@ -189,6 +193,8 @@ export default function MessagesPage() {
             return msg;
           }));
           
+          if (!isActive) return; // Abort if switched chats during decryption
+          
           setMessages(decryptedMessages);
           if (typeof window !== 'undefined') {
             localStorage.setItem(`timit_msgs_${activeChatId}_${user.id}`, JSON.stringify(decryptedMessages));
@@ -201,8 +207,11 @@ export default function MessagesPage() {
 
     fetchMessages();
     const interval = setInterval(fetchMessages, 5000); // 5 seconds to save quota
-    return () => clearInterval(interval);
-  }, [activeChatId]);
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, [activeChatId, user]);
 
   useEffect(() => {
     if (!showScanner || !user?.id) return;
