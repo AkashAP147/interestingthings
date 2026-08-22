@@ -113,8 +113,11 @@ export function SharePostModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-navy-dark w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+    <div className="fixed inset-0 z-[999] flex justify-center items-end sm:items-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div 
+        className="w-full sm:w-[500px] h-[75vh] sm:h-[600px] bg-white dark:bg-navy-dark sm:rounded-2xl rounded-t-2xl flex flex-col animate-slide-up sm:animate-fade-in shadow-xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
         
         {/* Header */}
         <div className="p-4 border-b border-gray-100 dark:border-white/10 flex justify-between items-center">
