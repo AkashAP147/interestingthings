@@ -22,11 +22,21 @@ export default function NotificationsPage() {
       return;
     }
 
+    // Load from local storage instantly
+    const cachedNotifs = localStorage.getItem(`timit_notifs_${user.id}`);
+    if (cachedNotifs) {
+      try {
+        setNotifications(JSON.parse(cachedNotifs));
+        setIsLoading(false);
+      } catch (e) {}
+    }
+
     const fetchAndMarkRead = async () => {
       try {
         const res = await getNotificationsAction();
         if (res.success && res.notifications) {
           setNotifications(res.notifications);
+          localStorage.setItem(`timit_notifs_${user.id}`, JSON.stringify(res.notifications));
         }
         
         // Mark as read after fetching
@@ -44,10 +54,18 @@ export default function NotificationsPage() {
     fetchAndMarkRead();
     
     // Load initial suggestions if available
+    const cachedSuggestions = localStorage.getItem(`timit_suggestions_${user.id}`);
+    if (cachedSuggestions) {
+      try {
+        setSuggestions(JSON.parse(cachedSuggestions));
+      } catch (e) {}
+    }
+
     const fetchSuggestions = async () => {
       const res = await getFriendSuggestionsAction();
       if (res.success && res.suggestions) {
         setSuggestions(res.suggestions);
+        localStorage.setItem(`timit_suggestions_${user.id}`, JSON.stringify(res.suggestions));
         // If we get suggestions that have a location score, it means location is already enabled
         if (res.suggestions.some((s: any) => s.distanceKm !== undefined)) {
           setLocationEnabled(true);

@@ -705,11 +705,17 @@ export default function MessagesPage() {
                         </button>
                       </div>
 
-                      <div className={`relative max-w-[75%] px-4 py-2 text-[15px] shadow-sm ${
-                        !isMine 
-                          ? 'bg-gradient-to-br from-purple to-purple-bright text-white rounded-2xl rounded-tl-sm' 
-                          : 'bg-white dark:bg-navy-dark text-navy-dark dark:text-white border border-purple-light/20 rounded-2xl rounded-tr-sm'
-                      } ${msg.isPending ? 'opacity-70' : ''}`}>
+                      <div 
+                        className={`relative max-w-[75%] px-4 py-2 text-[15px] shadow-sm ${
+                          !isMine 
+                            ? 'bg-gradient-to-br from-purple to-purple-bright text-white rounded-2xl rounded-tl-sm' 
+                            : 'bg-white dark:bg-navy-dark text-navy-dark dark:text-white border border-purple-light/20 rounded-2xl rounded-tr-sm'
+                        } ${msg.isPending ? 'opacity-70' : ''}`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setMessageToDelete(msg);
+                        }}
+                      >
                         {msg.imageUrl && !msg.isDeleted && (
                           <div className="mb-2 relative w-full overflow-hidden rounded-xl bg-black/10">
                             {msg.imageUrl.startsWith("data:video/") || msg.imageUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (

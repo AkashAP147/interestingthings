@@ -15,6 +15,7 @@ const navigation = [
   { name: "Discover", href: "/discover" },
   { name: "Search", href: "/search" },
   { name: "Messages", href: "/messages" },
+  { name: "Home", href: "/home" },
   { name: "About", href: "/about" },
 ];
 
@@ -93,7 +94,7 @@ export function Navbar() {
         {/* Desktop Navigation (Center) */}
         <div className="hidden lg:flex lg:gap-x-8">
           {navigation.map((item) => {
-            const isProtected = ["Discover", "Search", "Messages"].includes(item.name);
+            const isProtected = ["Discover", "Search", "Messages", "Home"].includes(item.name);
             if (isProtected && !user) return null;
 
             const isActive = pathname === item.href;
@@ -196,6 +197,10 @@ export function Navbar() {
             <span className="text-[10px] font-semibold">Messages</span>
           </Link>
         )}
+        <Link href="/home" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/home' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
+          <Globe className="h-6 w-6" />
+          <span className="text-[10px] font-semibold">Home</span>
+        </Link>
         <Link href="/about" prefetch={true} className={`flex flex-col items-center gap-1 p-2 ${pathname === '/about' ? 'text-purple' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}>
           <Info className="h-6 w-6" />
           <span className="text-[10px] font-semibold">About</span>

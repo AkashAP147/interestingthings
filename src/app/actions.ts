@@ -633,6 +633,21 @@ export async function deleteMessageAction(chatId: string, messageId: string, for
     }
   }
 
+  // Check if this was the last message to update the sidebar
+  if (forEveryone) {
+    const chatRef = database.ref(`chats/${chatId}`);
+    const messagesSnap = await database.ref(`messages/${chatId}`).orderByChild('createdAt').limitToLast(1).once('value');
+    const latestMessages = messagesSnap.val() || {};
+    const latestMessageKey = Object.keys(latestMessages)[0];
+    
+    if (latestMessageKey === messageId) {
+      await chatRef.update({
+        lastMessage: "🚫 This message was deleted",
+        lastMessagePayload: null,
+      });
+    }
+  }
+
   return { success: true };
 }
 
@@ -802,6 +817,66 @@ export async function getUserPostsAction(targetUserId: string, viewerId?: string
   }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   
   return { success: true, posts };
+}
+
+export async function getHomeFeedAction() {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  const { getUserById, readUsersDB } = await import("@/lib/user-db");
+
+  const currentUser = await getUserById(currentUserId);
+  if (!currentUser) return { success: false, error: "User not found" };
+
+  const followingList = currentUser.following || [];
+  const followersList = currentUser.followers || [];
+  const connectionIds = new Set([...followingList, ...followersList]);
+
+  const postsSnap = await database.ref('posts').once('value');
+  const allPostsData = postsSnap.val() || {};
+
+  const allUsers = await readUsersDB();
+  const userMap = new Map(allUsers.map(u => [u.id, { name: u.name, username: u.username, profilePicture: u.profilePicture }]));
+
+  let allPosts: any[] = [];
+
+  for (const authorId of Object.keys(allPostsData)) {
+    const authorPosts = allPostsData[authorId];
+    // A connection is someone you follow or someone who follows you
+    const isConnection = connectionIds.has(authorId);
+    const authorInfo = userMap.get(authorId) || { name: "Unknown User", username: "unknown", profilePicture: null };
+
+    for (const postId of Object.keys(authorPosts)) {
+      const post = authorPosts[postId];
+      
+      // Visibility filtering
+      if (post.visibility === "private" && authorId !== currentUserId) continue;
+      if (post.visibility === "friends" && !isConnection && authorId !== currentUserId) continue;
+
+      allPosts.push({
+        id: postId,
+        authorId,
+        authorName: authorInfo.name || authorInfo.username,
+        authorUsername: authorInfo.username,
+        authorProfilePicture: authorInfo.profilePicture,
+        ...post,
+        isConnection
+      });
+    }
+  }
+
+  // The user requested: "suggest friends followers or followings post first randomly then other users"
+  const shuffleArray = (arr: any[]) => arr.sort(() => Math.random() - 0.5);
+
+  const connectionPosts = shuffleArray(allPosts.filter(p => p.isConnection && p.authorId !== currentUserId));
+  const otherPosts = shuffleArray(allPosts.filter(p => !p.isConnection && p.authorId !== currentUserId));
+
+  // Combine them
+  const finalFeed = [...connectionPosts, ...otherPosts];
+
+  return { success: true, posts: finalFeed };
 }
 
 export async function togglePostLikeAction(authorId: string, postId: string) {
