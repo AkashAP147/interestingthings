@@ -24,6 +24,7 @@ export default function MessagesPage() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const decryptionCache = useRef(new Map<string, any>());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [searchUsername, setSearchUsername] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -157,10 +158,17 @@ export default function MessagesPage() {
       
       const decryptedMessages = await Promise.all(rawMessages.map(async (msg: any) => {
         if (msg.payload && privKey) {
+          const cacheKey = `${msg.id}_${msg.payload}`;
+          if (decryptionCache.current.has(cacheKey)) {
+             return { ...msg, ...decryptionCache.current.get(cacheKey) };
+          }
+          
           const myKeyIndex = msg.senderId === user.id ? 0 : 1; 
           const decrypted = await decryptPayload(msg.payload, privKey, myKeyIndex);
           if (decrypted) {
-            return { ...msg, ...decrypted, isDecrypted: true };
+            const decData = { text: decrypted.text, imageUrl: decrypted.imageUrl, isDecrypted: true };
+            decryptionCache.current.set(cacheKey, decData);
+            return { ...msg, ...decData };
           } else {
             return { ...msg, text: "🔒 Encrypted Message (Unable to decrypt)", imageUrl: null };
           }

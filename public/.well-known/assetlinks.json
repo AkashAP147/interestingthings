@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "app.vercel.thingsyouneverseen.twa",
-    "sha256_cert_fingerprints": ["7C:F0:A1:89:7E:CE:26:B5:4E:92:EA:C0:4F:37:A7:14:BA:94:3A:53:75:F5:AD:FB:EF:91:F1:12:E5:58:E6:B6"]
+    "sha256_cert_fingerprints": ["A5:06:B9:78:D5:2F:B6:A7:E5:93:CF:F0:04:39:E5:B1:22:C3:A7:60:B2:E7:7E:C6:D0:6D:3E:4F:CE:6D:FB:CA"]
   }
 }]
