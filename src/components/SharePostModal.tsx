@@ -97,7 +97,14 @@ export function SharePostModal({
         }
 
         // 4. Send message
-        const sendRes = await sendMessageAction(chatId, plainText, undefined, finalPayload, (sharedPostPayload as any).post || sharedPostPayload);
+        const sendRes = await sendMessageAction(
+          chatId, 
+          plainText, 
+          undefined, 
+          finalPayload, 
+          (sharedPostPayload as any).post || sharedPostPayload,
+          `Check out this post from ${post.authorName}`
+        );
         if (!sendRes.success) throw new Error("Failed to send");
       } catch (err) {
         console.error("Background send failed:", err);

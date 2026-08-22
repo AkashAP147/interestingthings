@@ -434,7 +434,7 @@ export default function MessagesPage() {
         
         while (!success && attempts < 5) {
           try {
-            const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
+            const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload, undefined, text);
             if (result?.error) throw new Error(result.error);
             success = true;
           } catch (err) {

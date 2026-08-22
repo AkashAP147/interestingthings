@@ -430,7 +430,7 @@ export async function startChatAction(targetUsername: string) {
   return { success: true, chatId };
 }
 
-export async function sendMessageAction(chatId: string, text?: string, imageUrl?: string, payload?: any, sharedPost?: any) {
+export async function sendMessageAction(chatId: string, text?: string, imageUrl?: string, payload?: any, sharedPost?: any, notificationText?: string) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
   if (!currentUserId) return { success: false, error: "Unauthorized" };
@@ -478,28 +478,41 @@ export async function sendMessageAction(chatId: string, text?: string, imageUrl?
     // Fetch FCM token for recipient
     const tokenSnap = await database.ref(`fcmTokens/${recipientId}`).once('value');
     if (tokenSnap.exists()) {
-      const { token } = tokenSnap.val();
-      if (token) {
+      const tokens = Object.values(tokenSnap.val()) as string[];
+      if (tokens.length > 0) {
         try {
           const { messaging } = await import("@/lib/firebase");
+          const senderName = (await database.ref(`users/${currentUserId}/name`).once('value')).val() || "Someone";
           
-          let senderName = "Someone";
-          const senderSnap = await database.ref(`users/${currentUserId}`).once('value');
-          if (senderSnap.exists()) {
-            senderName = senderSnap.val().name || senderSnap.val().username || "Someone";
+          let messageBody = "Sent you a message";
+          if (sharedPost) {
+            messageBody = `Shared a post with you`;
+          } else if (notificationText) {
+            messageBody = notificationText;
+          } else if (payload) {
+            messageBody = "🔒 Encrypted Message";
+          } else if (text) {
+            messageBody = text;
+          } else if (imageUrl) {
+            messageBody = "📸 Image";
           }
           
-          await messaging.send({
-            token,
+          const pushPayload = {
             notification: {
               title: `New message from ${senderName}`,
-              body: payload ? "🔒 Encrypted Message" : (imageUrl ? "📸 Image" : text?.trim().substring(0, 50) || "New message"),
+              body: messageBody,
+              icon: '/icon-192x192.png',
+              clickAction: `https://thingsyouneverseen.vercel.app/messages`
             },
             data: {
-              url: "/messages",
-              chatId
+              chatId: chatId,
+              type: 'chat_message'
             }
-          });
+          };
+          
+          await Promise.all(tokens.map(token => 
+            messaging.send({ ...pushPayload, token }).catch(e => console.error("Failed to send push", e))
+          ));
         } catch (e) {
           console.error("FCM Send Error:", e);
         }
