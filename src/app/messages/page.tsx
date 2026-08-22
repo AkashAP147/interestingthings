@@ -379,41 +379,48 @@ export default function MessagesPage() {
   const sendOptimisticMessage = async (text: string, imageUrl: string | null) => {
     if (!activeChatId || !user) return;
     
-    const activeChatOtherUser = chats.find(c => c.id === activeChatId)?.otherUser;
-    const recipientPubKey = activeChatOtherUser?.publicKey;
-    const myPubKey = (user as any).publicKey || localStorage.getItem(`pubKey_${user.id}`);
-    
-    let finalPayload = undefined;
-    let finalPlainText = text;
-    let finalImageUrl = imageUrl;
-    
-    if (recipientPubKey && myPubKey) {
-      try {
-        finalPayload = await encryptPayload({ text, imageUrl }, [myPubKey, recipientPubKey]);
-        finalPlainText = "";
-        finalImageUrl = null;
-      } catch(err) {
-        console.error("Encryption failed", err);
-      }
-    }
-
+    // 1. Optimistic UI update instantly BEFORE anything else
     const tempId = `temp-${Date.now()}`;
     const pendingMsg = {
       id: tempId,
       senderId: user.id,
-      text: text, // Show plaintext instantly to sender
+      text: text, 
       imageUrl: imageUrl, 
       createdAt: new Date().toISOString(),
       isPending: false,
       status: "sent"
     };
     
-    // Add instantly as if it was sent
     setPendingMessages(prev => [...prev, pendingMsg]);
     
-    // Run network tasks in the background asynchronously
+    // Scroll to bottom instantly
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+    }, 10);
+    
+    // 2. Process payload in background
     (async () => {
       try {
+        const activeChatOtherUser = chats.find(c => c.id === activeChatId)?.otherUser;
+        const recipientPubKey = activeChatOtherUser?.publicKey;
+        const myPubKey = (user as any).publicKey || localStorage.getItem(`pubKey_${user.id}`);
+        
+        let finalPayload = undefined;
+        let finalPlainText = text;
+        let finalImageUrl = imageUrl;
+        
+        if (recipientPubKey && myPubKey) {
+          try {
+            finalPayload = await encryptPayload({ text, imageUrl }, [myPubKey, recipientPubKey]);
+            finalPlainText = "";
+            finalImageUrl = null;
+          } catch(err) {
+            console.error("Encryption failed", err);
+          }
+        }
+        
         let success = false;
         let attempts = 0;
         
@@ -642,7 +649,7 @@ export default function MessagesPage() {
             </div>
             
             {/* Messages Scroll Area */}
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 gap-4 minimal-scrollbar flex flex-col-reverse">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 gap-4 minimal-scrollbar flex flex-col-reverse scroll-smooth">
               {isLoadingMessages ? (
                 <div className="h-full flex items-center justify-center text-purple/50">
                   <Loader2 className="w-8 h-8 animate-spin" />
