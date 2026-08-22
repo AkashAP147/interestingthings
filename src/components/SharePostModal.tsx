@@ -47,62 +47,62 @@ export function SharePostModal({
   const handleSend = async (recipient: any) => {
     if (!user) return;
     
-    setSendingTo(prev => ({ ...prev, [recipient.id]: 'sending' }));
+    // Optimistic UI update
+    setSendingTo(prev => ({ ...prev, [recipient.id]: 'sent' }));
     
-    try {
-      // 1. Start or get chat
-      const chatRes = await startChatAction(recipient.username || recipient.id);
-      if (!chatRes.success || !chatRes.chatId) throw new Error("Failed to create chat");
-      
-      const chatId = chatRes.chatId;
+    setTimeout(() => {
+      setSendingTo(prev => {
+        const next = { ...prev };
+        delete next[recipient.id];
+        return next;
+      });
+    }, 2000);
+    
+    // Background network process
+    (async () => {
+      try {
+        // 1. Start or get chat
+        const chatRes = await startChatAction(recipient.username || recipient.id);
+        if (!chatRes.success || !chatRes.chatId) throw new Error("Failed to create chat");
+        
+        const chatId = chatRes.chatId;
 
-      // 2. Prepare payload
-      const sharedPostPayload = {
-        type: 'shared_post',
-        id: post.id,
-        text: post.title || post.text || "",
-        imageUrl: post.imageUrl || null,
-        authorName: post.authorName,
-        authorId: post.authorId,
-        isDiscovery: post.isDiscovery || false
-      };
+        // 2. Prepare payload
+        const sharedPostPayload = {
+          type: 'shared_post',
+          id: post.id,
+          text: post.title || post.text || "",
+          imageUrl: post.imageUrl || null,
+          authorName: post.authorName,
+          authorId: post.authorId,
+          isDiscovery: post.isDiscovery || false
+        };
 
-      // 3. Encrypt payload
-      let finalPayload = null;
-      let plainText = `Check out this post from ${post.authorName}`;
-      
-      const myPubKey = user.publicKey;
-      const recipientPubKey = recipient.publicKey;
-      
-      if (myPubKey && recipientPubKey) {
-        try {
-          finalPayload = await encryptPayload({ 
-            text: plainText
-          }, [myPubKey, recipientPubKey]);
-          plainText = ""; // hide plaintext if encrypted
-        } catch (err) {
-          console.error("Encryption failed, falling back to plaintext", err);
+        // 3. Encrypt payload
+        let finalPayload = null;
+        let plainText = `Check out this post from ${post.authorName}`;
+        
+        const myPubKey = user.publicKey;
+        const recipientPubKey = recipient.publicKey;
+        
+        if (myPubKey && recipientPubKey) {
+          try {
+            finalPayload = await encryptPayload({ 
+              text: plainText
+            }, [myPubKey, recipientPubKey]);
+            plainText = ""; // hide plaintext if encrypted
+          } catch (err) {
+            console.error("Encryption failed, falling back to plaintext", err);
+          }
         }
-      }
 
-      // 4. Send message
-      const sendRes = await sendMessageAction(chatId, plainText, undefined, finalPayload, (sharedPostPayload as any).post || sharedPostPayload);
-      if (!sendRes.success) throw new Error("Failed to send");
-      
-      setSendingTo(prev => ({ ...prev, [recipient.id]: 'sent' }));
-      
-      setTimeout(() => {
-        setSendingTo(prev => {
-          const next = { ...prev };
-          delete next[recipient.id];
-          return next;
-        });
-      }, 3000);
-      
-    } catch (err) {
-      console.error(err);
-      setSendingTo(prev => ({ ...prev, [recipient.id]: 'error' }));
-    }
+        // 4. Send message
+        const sendRes = await sendMessageAction(chatId, plainText, undefined, finalPayload, (sharedPostPayload as any).post || sharedPostPayload);
+        if (!sendRes.success) throw new Error("Failed to send");
+      } catch (err) {
+        console.error("Background send failed:", err);
+      }
+    })();
   };
 
   if (!isOpen) return null;
