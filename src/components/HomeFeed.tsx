@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { togglePostLikeAction, getPostCommentsAction, addPostCommentAction } from "@/app/actions";
-import { Heart, MessageCircle, Share2, User as UserIcon, Send, Loader2, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { togglePostLikeAction, getPostCommentsAction, addPostCommentAction, toggleSavePostAction } from "@/app/actions";
+import { Heart, MessageCircle, Share2, User as UserIcon, Send, Loader2, X, Bookmark } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { SharePostModal } from "@/components/SharePostModal";
 import Link from "next/link";
 
-export function HomeFeed({ initialPosts }: { initialPosts: any[] }) {
+export function HomeFeed({ initialPosts, initialSavedIds = [] }: { initialPosts: any[], initialSavedIds?: string[] }) {
   const { user } = useAuth();
   
   const timeAgo = (dateString: string) => {
@@ -20,7 +20,14 @@ export function HomeFeed({ initialPosts }: { initialPosts: any[] }) {
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
+  const formatNumber = (num: number) => {
+    if (!num) return "0";
+    return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(num);
+  };
+
   const [posts, setPosts] = useState<any[]>(initialPosts);
+  const [savedPostIds, setSavedPostIds] = useState<string[]>(initialSavedIds);
+  const [animatingPostId, setAnimatingPostId] = useState<string | null>(null);
   
   // Interaction state
   const [sharePostItem, setSharePostItem] = useState<any>(null);
@@ -33,21 +40,66 @@ export function HomeFeed({ initialPosts }: { initialPosts: any[] }) {
   const handleLike = async (post: any) => {
     if (!user) return;
     
-    // Optimistic UI
-    const isLiked = post.likedBy?.includes(user.id);
-    const newLikedBy = isLiked 
-      ? post.likedBy.filter((id: string) => id !== user.id)
-      : [...(post.likedBy || []), user.id];
-      
-    setPosts(posts.map(p => p.id === post.id ? { ...p, likedBy: newLikedBy } : p));
-    
+    // Optimistic update
+    setPosts(posts.map(p => {
+      if (p.id === post.id) {
+        const likedBy = p.likedBy || [];
+        const isLiked = likedBy.includes(user.id);
+        return {
+          ...p,
+          likedBy: isLiked 
+            ? likedBy.filter((id: string) => id !== user.id)
+            : [...likedBy, user.id]
+        };
+      }
+      return p;
+    }));
+
     try {
       await togglePostLikeAction(post.authorId, post.id);
     } catch (e) {
-      // Revert on error
       setPosts(posts.map(p => p.id === post.id ? { ...p, likedBy: post.likedBy } : p));
     }
   };
+
+  const handleSavePost = async (post: any) => {
+    if (!user) return;
+
+    // Optimistic update
+    const isSaved = savedPostIds.includes(post.id);
+    if (isSaved) {
+      setSavedPostIds(prev => prev.filter(id => id !== post.id));
+    } else {
+      setSavedPostIds(prev => [...prev, post.id]);
+    }
+
+    const res = await toggleSavePostAction(post.id, post.authorId);
+    if (!res.success) {
+      // Revert if failed
+      if (isSaved) {
+        setSavedPostIds(prev => [...prev, post.id]);
+      } else {
+        setSavedPostIds(prev => prev.filter(id => id !== post.id));
+      }
+    }
+  };
+
+  // Double click handler for image
+  const handleDoubleClick = (e: React.MouseEvent, post: any) => {
+    e.preventDefault();
+    if (!post.likedBy?.includes(user?.id || '')) {
+      handleLike(post);
+    }
+    
+    // Trigger animation
+    setAnimatingPostId(post.id);
+    setTimeout(() => {
+      setAnimatingPostId(null);
+    }, 800);
+  };
+
+  // Prevent default double click zoom on mobile if needed
+  const preventDefault = (e: any) => e.preventDefault();
 
   const openComments = async (post: any) => {
     setActiveCommentPost(post);
@@ -102,89 +154,119 @@ export function HomeFeed({ initialPosts }: { initialPosts: any[] }) {
 
   return (
     <div className="flex flex-col gap-8 pb-12">
+      <style>{`
+        @keyframes heartBurst {
+          0% { transform: scale(0); opacity: 0; }
+          15% { transform: scale(1.2); opacity: 0.9; }
+          30% { transform: scale(1); opacity: 0.9; }
+          80% { transform: scale(1); opacity: 0.9; }
+          100% { transform: scale(1.3); opacity: 0; }
+        }
+        .heart-animation {
+          animation: heartBurst 0.8s ease-in-out forwards;
+        }
+      `}</style>
       {posts.map((post) => (
-        <div key={post.id} className="bg-white dark:bg-navy-dark rounded-2xl shadow-sm border border-purple-light/20 overflow-hidden flex flex-col">
+        <div key={post.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden flex flex-col">
           
           {/* Header */}
-          <div className="p-4 flex items-center justify-between">
-            <Link href={`/profile/${post.authorId}`} className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-light to-blue p-0.5 overflow-hidden">
-                <div className="w-full h-full bg-white dark:bg-navy-deep rounded-full overflow-hidden flex items-center justify-center">
-                  {post.authorProfilePicture ? (
-                    <img src={post.authorProfilePicture} alt={post.authorName} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                  ) : (
-                    <UserIcon className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
+          <div className="flex items-center justify-between p-3 border-b border-gray-100 dark:border-gray-800">
+            <Link href={`/profile/${post.authorId}`} className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 flex items-center justify-center">
+                {post.authorProfilePicture ? (
+                  <img src={post.authorProfilePicture} alt={post.authorName} className="w-full h-full object-cover" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                )}
               </div>
-              <div>
-                <p className="font-semibold text-navy-dark dark:text-white text-sm group-hover:text-purple transition-colors">
-                  {post.authorName}
-                </p>
-                <p className="text-xs text-gray-text">
+              <div className="flex flex-col">
+                <span className="font-bold text-sm text-black dark:text-white hover:underline">
+                  {post.authorName || "Unknown User"}
+                </span>
+                <span className="text-xs text-gray-500">
                   {post.createdAt ? timeAgo(post.createdAt) : ''}
-                </p>
+                </span>
               </div>
             </Link>
           </div>
 
           {/* Media */}
           {post.imageUrls && post.imageUrls.length > 0 && (
-            <div className="w-full bg-black flex items-center justify-center relative aspect-square sm:aspect-auto sm:max-h-[600px]">
+            <div 
+              className="w-full bg-black relative select-none flex items-center justify-center overflow-hidden"
+              onDoubleClick={(e) => handleDoubleClick(e, post)}
+              onMouseDown={preventDefault} // Prevent text selection on double click
+            >
               <img 
                 src={post.imageUrls[0]} 
-                alt="Post" 
-                className="w-full h-full object-contain"
+                alt="Post media" 
+                className="w-full h-auto object-cover max-h-[600px] cursor-pointer"
               />
+              {/* Like Animation Overlay */}
+              {animatingPostId === post.id && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <Heart 
+                    className="w-24 h-24 text-pink-400 fill-pink-400 drop-shadow-2xl heart-animation" 
+                  />
+                </div>
+              )}
             </div>
           )}
 
           {/* Actions */}
-          <div className="p-4 pb-2 flex items-center gap-4">
+          <div className="flex items-center justify-between p-3">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => handleLike(post)} 
+                className={`flex items-center gap-1.5 transition-transform hover:scale-105 ${post.likedBy?.includes(user?.id || '') ? 'text-pink-500' : 'text-black dark:text-white'}`}
+              >
+                <Heart className="w-6 h-6" fill={post.likedBy?.includes(user?.id || '') ? "currentColor" : "none"} />
+                <span className="font-bold text-sm">{formatNumber(post.likedBy?.length || 0)}</span>
+              </button>
+              
+              <button 
+                onClick={() => openComments(post)}
+                className="flex items-center gap-1.5 text-black dark:text-white transition-transform hover:scale-105"
+              >
+                <MessageCircle className="w-6 h-6" />
+                <span className="font-bold text-sm">{formatNumber(post.commentCount || 0)}</span>
+              </button>
+              
+              <button 
+                onClick={() => setSharePostItem({
+                  id: post.id,
+                  text: post.caption,
+                  imageUrl: post.imageUrls?.[0],
+                  authorName: post.authorName,
+                  authorId: post.authorId
+                })}
+                className="flex items-center gap-1.5 text-black dark:text-white transition-transform hover:scale-105"
+              >
+                <Share2 className="w-6 h-6" />
+                <span className="font-bold text-sm">{formatNumber(post.shareCount || 0)}</span>
+              </button>
+            </div>
+            
             <button 
-              onClick={() => handleLike(post)} 
-              className={`hover:scale-110 transition-transform ${post.likedBy?.includes(user?.id || '') ? 'text-pink' : 'text-gray-text hover:text-navy-dark dark:hover:text-white'}`}
+              onClick={() => handleSavePost(post)}
+              className="text-black dark:text-white transition-transform hover:scale-105"
             >
-              <Heart className="w-6 h-6" fill={post.likedBy?.includes(user?.id || '') ? "currentColor" : "none"} />
-            </button>
-            <button 
-              onClick={() => openComments(post)}
-              className="text-gray-text hover:text-navy-dark dark:hover:text-white hover:scale-110 transition-transform"
-            >
-              <MessageCircle className="w-6 h-6" />
-            </button>
-            <button 
-              onClick={() => setSharePostItem({
-                id: post.id,
-                text: post.caption,
-                imageUrl: post.imageUrls?.[0],
-                authorName: post.authorName,
-                authorId: post.authorId
-              })}
-              className="text-gray-text hover:text-navy-dark dark:hover:text-white hover:scale-110 transition-transform"
-            >
-              <Share2 className="w-6 h-6" />
+              <Bookmark className="w-6 h-6" fill={savedPostIds.includes(post.id) ? "currentColor" : "none"} />
             </button>
           </div>
 
-          {/* Likes & Caption */}
-          <div className="px-4 pb-4">
-            {post.likedBy?.length > 0 && (
-              <p className="font-semibold text-sm text-navy-dark dark:text-white mb-1">
-                {post.likedBy.length} {post.likedBy.length === 1 ? 'like' : 'likes'}
-              </p>
-            )}
-            
-            <div className="text-sm text-navy-dark dark:text-white">
-              <Link href={`/profile/${post.authorId}`} className="font-semibold mr-2 hover:text-purple transition-colors">
-                {post.authorName}
+          {/* Caption */}
+          <div className="px-3 pb-4">
+            <div className="text-sm text-black dark:text-white break-words">
+              <Link href={`/profile/${post.authorId}`} className="font-bold mr-2 hover:underline">
+                {post.authorName || "Unknown User"}
               </Link>
               <span className="whitespace-pre-wrap">{post.caption}</span>
             </div>
             
             <button 
               onClick={() => openComments(post)}
-              className="text-sm text-gray-text hover:text-navy-dark dark:hover:text-white mt-2 transition-colors"
+              className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mt-1"
             >
               View all comments
             </button>

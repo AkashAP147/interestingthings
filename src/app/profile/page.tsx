@@ -1,7 +1,7 @@
 import { Flame, FolderHeart, Bookmark, Settings, User as UserIcon, Shield } from "lucide-react";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { readDB } from "@/lib/db";
-import { getCurrentUserAction, getCachedUserConnectionsAction, getCachedUserPostsAction } from "@/app/actions";
+import { getCurrentUserAction, getCachedUserConnectionsAction, getCachedUserPostsAction, getSavedPostsAction } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { EditProfileModal } from "@/components/EditProfileModal";
 import { GalleryTab } from "@/components/GalleryTab";
@@ -17,10 +17,11 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
   const currentTab = searchParams?.tab || "gallery";
   
   // Parallelize data fetching
-  const [allData, postsRes, connectionsRes] = await Promise.all([
+  const [allData, postsRes, connectionsRes, savedPostsRes] = await Promise.all([
     currentTab === "saved" ? readDB() : Promise.resolve([]),
     currentTab === "gallery" ? getCachedUserPostsAction(user.id, user.id) : Promise.resolve({ success: false, posts: [] }),
-    getCachedUserConnectionsAction(user.id)
+    getCachedUserConnectionsAction(user.id),
+    currentTab === "collections" ? getSavedPostsAction(user.id) : Promise.resolve({ success: false, posts: [] })
   ]);
 
   let savedDiscoveries: any[] = [];
@@ -31,6 +32,11 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
   let userPosts: any[] = [];
   if (currentTab === "gallery" && postsRes.success) {
     userPosts = postsRes.posts;
+  }
+
+  let collectionsPosts: any[] = [];
+  if (currentTab === "collections" && savedPostsRes.success) {
+    collectionsPosts = savedPostsRes.posts;
   }
 
   const activityDates = user.activityDates || [];
@@ -138,10 +144,16 @@ export default async function ProfilePage(props: { searchParams: Promise<{ tab?:
             <GalleryTab initialPosts={userPosts} profileName={user.name || user.username} />
           </div>
         ) : currentTab === 'collections' ? (
-          <div className="py-24 text-center text-gray-text">
-            <FolderHeart className="h-16 w-16 mx-auto mb-4 opacity-20" />
-            <h3 className="text-xl font-heading font-semibold text-navy-dark dark:text-white">Coming Soon!</h3>
-            <p className="mt-2 max-w-md mx-auto">We're working hard on bringing Custom Collections to TIMIT so you can organize your favorite discoveries.</p>
+          <div className="py-8">
+            {collectionsPosts.length === 0 ? (
+              <div className="py-24 text-center text-gray-text">
+                <FolderHeart className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                <h3 className="text-xl font-heading font-semibold text-navy-dark dark:text-white">No Saved Posts</h3>
+                <p className="mt-2 max-w-md mx-auto">Double tap or bookmark posts in the Home feed to save them to your collections.</p>
+              </div>
+            ) : (
+              <GalleryTab initialPosts={collectionsPosts} profileName={user.name || user.username} />
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">

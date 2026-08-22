@@ -1150,3 +1150,80 @@ export async function getFriendSuggestionsAction() {
   const suggestions = await getFriendSuggestions(currentUserId);
   return { success: true, suggestions };
 }
+
+export async function toggleSavePostAction(postId: string, authorId: string) {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, error: "Unauthorized" };
+
+  const { database } = await import("@/lib/firebase");
+  
+  const savedRef = database.ref(`users/${currentUserId}/savedPosts`);
+  let isSaved = false;
+  
+  await savedRef.transaction((savedPosts) => {
+    let posts = savedPosts || [];
+    const index = posts.findIndex((p: any) => p.postId === postId);
+    if (index === -1) {
+      posts.push({ postId, authorId, savedAt: new Date().toISOString() });
+      isSaved = true;
+    } else {
+      posts.splice(index, 1);
+      isSaved = false;
+    }
+    return posts;
+  });
+
+  revalidatePath("/profile");
+  return { success: true, saved: isSaved };
+}
+
+export async function getSavedPostsAction(userId: string) {
+  const { database } = await import("@/lib/firebase");
+  const { readUsersDB } = await import("@/lib/user-db");
+  
+  const savedSnap = await database.ref(`users/${userId}/savedPosts`).once('value');
+  const savedPostsMeta = savedSnap.val() || [];
+  
+  if (!savedPostsMeta.length) return { success: true, posts: [] };
+
+  const allUsers = await readUsersDB();
+  const userMap = new Map(allUsers.map(u => [u.id, { name: u.name, username: u.username, profilePicture: u.profilePicture }]));
+  
+  const posts = [];
+  
+  for (const meta of savedPostsMeta) {
+    const postSnap = await database.ref(`posts/${meta.authorId}/${meta.postId}`).once('value');
+    const post = postSnap.val();
+    
+    if (post) {
+      const authorInfo = userMap.get(meta.authorId) || { name: "Unknown User", username: "unknown", profilePicture: null };
+      posts.push({
+        id: meta.postId,
+        authorId: meta.authorId,
+        authorName: authorInfo.name || authorInfo.username,
+        authorUsername: authorInfo.username,
+        authorProfilePicture: authorInfo.profilePicture,
+        ...post,
+        savedAt: meta.savedAt
+      });
+    }
+  }
+  
+  // Sort by savedAt descending
+  posts.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+  
+  return { success: true, posts };
+}
+
+export async function getSavedPostIdsAction() {
+  const cookieStore = await cookies();
+  const currentUserId = cookieStore.get("auth_user")?.value;
+  if (!currentUserId) return { success: false, savedIds: [] };
+
+  const { database } = await import("@/lib/firebase");
+  const savedSnap = await database.ref(`users/${currentUserId}/savedPosts`).once('value');
+  const savedPostsMeta = savedSnap.val() || [];
+  
+  return { success: true, savedIds: savedPostsMeta.map((p: any) => p.postId) };
+}

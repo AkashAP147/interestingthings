@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getHomeFeedAction } from "@/app/actions";
+import { getHomeFeedAction, getSavedPostIdsAction } from "@/app/actions";
 import { HomeFeed } from "@/components/HomeFeed";
 
 export default async function HomePage() {
@@ -12,6 +12,7 @@ export default async function HomePage() {
   }
 
   const { success, posts, error } = await getHomeFeedAction();
+  const { savedIds } = await getSavedPostIdsAction();
 
   if (!success) {
     return (
@@ -26,7 +27,7 @@ export default async function HomePage() {
     <div className="min-h-screen bg-gray-50 dark:bg-navy-deep pt-24 pb-24">
       <div className="max-w-xl mx-auto px-4 sm:px-0">
         <h1 className="text-2xl font-heading font-bold text-navy-dark dark:text-white mb-6">Home Feed</h1>
-        <HomeFeed initialPosts={posts || []} />
+        <HomeFeed initialPosts={posts || []} initialSavedIds={savedIds || []} />
       </div>
     </div>
   );
