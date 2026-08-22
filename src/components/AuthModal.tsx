@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, ArrowRight, Eye, EyeOff, Camera } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { setUsernameAction, resolveUsernameToEmailAction, getUserEncryptedPrivateKeyAction } from "@/app/actions";
+import { setUsernameAction, resolveUsernameToEmailAction, getUserEncryptedPrivateKeyAction, getLinkSessionAction } from "@/app/actions";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
 import { decryptPrivateKeyWithPassword } from "@/lib/e2ee";
@@ -44,22 +44,16 @@ export function AuthModal() {
             html5QrCode.stop().then(async () => {
               setIsSubmitting(true);
               try {
-                const { database } = await import("@/lib/firebase");
-                const ref = database.ref(`linkSessions/${uuid}`);
-                const snapshot = await ref.once('value');
-                const session = snapshot.val();
-
-                if (!session || Date.now() > session.expiresAt) {
-                  setError("Invalid or expired QR code.");
+                const res = await getLinkSessionAction(uuid);
+                
+                if (!res.success || !res.payload) {
+                  setError(res.error || "Invalid or expired QR code.");
                   setIsSubmitting(false);
                   return;
                 }
                 
-                // delete the session immediately
-                await ref.remove();
-
                 const { decryptPrivateKeyWithPassword } = await import("@/lib/e2ee");
-                const payloadString = await decryptPrivateKeyWithPassword(session.payload, encryptionKey);
+                const payloadString = await decryptPrivateKeyWithPassword(res.payload, encryptionKey);
                 
                 if (!payloadString) {
                   setError("Failed to decrypt session.");

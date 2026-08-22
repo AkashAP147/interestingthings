@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { updateUserProfileAction, backupPrivateKeyAction, createLinkDeviceTokenAction } from "@/app/actions";
+import { updateUserProfileAction, backupPrivateKeyAction, createLinkDeviceTokenAction, saveLinkSessionAction } from "@/app/actions";
 import { encryptPrivateKeyWithPassword, decryptPrivateKeyWithPassword } from "@/lib/e2ee";
 import { Loader2, Camera, CheckCircle2, User, AtSign, Phone, Mail, Eye, X, Lock, Key } from "lucide-react";
 import QRCode from "react-qr-code";
@@ -104,11 +104,11 @@ function E2EEManager({ user }: { user: any }) {
                           
                           const uuid = crypto.randomUUID();
                           
-                          const { database } = await import("@/lib/firebase");
-                          await database.ref(`linkSessions/${uuid}`).set({
-                            payload: encryptedPayload,
-                            expiresAt: Date.now() + 5 * 60 * 1000
-                          });
+                          const saveRes = await saveLinkSessionAction(uuid, encryptedPayload);
+                          if (!saveRes.success) {
+                            setQrError("Failed to start session.");
+                            return;
+                          }
 
                           setQrUuid(uuid);
                           setQrPwd(encryptionKey);
@@ -213,11 +213,11 @@ function E2EEManager({ user }: { user: any }) {
                           
                           const uuid = crypto.randomUUID();
                           
-                          const { database } = await import("@/lib/firebase");
-                          await database.ref(`linkSessions/${uuid}`).set({
-                            payload: encryptedPayload,
-                            expiresAt: Date.now() + 5 * 60 * 1000
-                          });
+                          const saveRes = await saveLinkSessionAction(uuid, encryptedPayload);
+                          if (!saveRes.success) {
+                            setQrError("Failed to start session.");
+                            return;
+                          }
 
                           setQrUuid(uuid);
                           setQrPwd(encryptionKey);

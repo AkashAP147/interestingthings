@@ -687,6 +687,39 @@ export async function createLinkDeviceTokenAction() {
   }
 }
 
+export async function saveLinkSessionAction(uuid: string, payload: any) {
+  const { database } = await import("@/lib/firebase");
+  try {
+    await database.ref(`linkSessions/${uuid}`).set({
+      payload,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getLinkSessionAction(uuid: string) {
+  const { database } = await import("@/lib/firebase");
+  try {
+    const ref = database.ref(`linkSessions/${uuid}`);
+    const snapshot = await ref.once('value');
+    const session = snapshot.val();
+    
+    if (!session || Date.now() > session.expiresAt) {
+      return { success: false, error: "Invalid or expired QR code." };
+    }
+    
+    // delete immediately
+    await ref.remove();
+    
+    return { success: true, payload: session.payload };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function createPostAction(formData: FormData) {
   const cookieStore = await cookies();
   const currentUserId = cookieStore.get("auth_user")?.value;
