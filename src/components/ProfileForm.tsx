@@ -77,62 +77,68 @@ function E2EEManager({ user }: { user: any }) {
             onClick={() => setShowQR(!showQR)}
             className="text-sm font-bold hover:underline"
           >
-            {showQR ? "Hide Recovery QR Code" : "Show Recovery QR Code"}
+            {showQR ? "Hide Link Device QR Code" : "Show Link Device QR Code"}
           </button>
           {showQR && (
-            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit shadow-sm border border-purple-light/20">
-              {!qrPwd ? (
-                <div className="flex flex-col gap-3">
-                  <p className="text-xs text-navy-dark font-medium">Enter Master Password to reveal QR:</p>
-                  <div className="flex gap-2">
-                    <input 
-                      type="password" 
-                      id="qr-pwd-input" 
-                      className="border border-purple-light/50 rounded-lg px-3 py-1.5 text-sm text-navy-dark focus:outline-none focus:border-purple"
-                      placeholder="Password"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') document.getElementById('btn-generate-qr')?.click();
-                      }}
-                    />
-                    <button 
-                      id="btn-generate-qr"
-                      type="button"
-                      className="bg-purple text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-purple-bright"
-                      onClick={async () => {
-                        const val = (document.getElementById('qr-pwd-input') as HTMLInputElement).value;
-                        if (!val) return;
-                        try {
-                          const payload = JSON.parse(user.encryptedPrivateKey);
-                          const dec = await decryptPrivateKeyWithPassword(payload, val);
-                          if (dec) {
-                            const res = await generateRecoverySessionAction(val);
-                            if (res.success && res.uuid) {
-                              setQrUuid(res.uuid);
-                              setQrPwd(val);
-                              setQrError("");
-                            } else {
-                              setQrError("Failed to generate session.");
-                            }
-                          } else {
-                            setQrError("Incorrect password");
-                          }
-                        } catch(e) {
-                          setQrError("Error verifying password");
+            <div className="mt-4 flex flex-col items-center bg-white p-4 rounded-xl w-fit shadow-sm border border-green/20">
+              {!qrUuid ? (
+                <div className="flex flex-col items-center gap-3">
+                  <p className="text-xs text-navy-dark font-medium text-center">Generate a secure QR code to link a new device without a password.</p>
+                  <button 
+                    id="btn-generate-qr"
+                    type="button"
+                    className="bg-green text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90"
+                    onClick={async () => {
+                      try {
+                        const localKey = localStorage.getItem(`privKey_${user.id}`);
+                        if (!localKey) {
+                          setQrError("No local private key found.");
+                          return;
                         }
-                      }}
-                    >
-                      View
-                    </button>
-                  </div>
-                  {qrError && <p className="text-pink text-xs font-semibold">{qrError}</p>}
+
+                        const res = await createLinkDeviceTokenAction();
+                        if (res.success && res.token) {
+                          const encryptionKey = crypto.randomUUID();
+                          const payloadString = JSON.stringify({ token: res.token, privateKey: localKey });
+                          const encryptedPayload = await encryptPrivateKeyWithPassword(payloadString, encryptionKey);
+                          
+                          const uuid = crypto.randomUUID();
+                          
+                          const { database } = await import("@/lib/firebase");
+                          await database.ref(`linkSessions/${uuid}`).set({
+                            payload: encryptedPayload,
+                            expiresAt: Date.now() + 5 * 60 * 1000
+                          });
+
+                          setQrUuid(uuid);
+                          setQrPwd(encryptionKey);
+                          setQrError("");
+                        } else {
+                          setQrError("Failed to generate token.");
+                        }
+                      } catch (e) {
+                        setQrError("An error occurred.");
+                      }
+                    }}
+                  >
+                    Generate Link QR
+                  </button>
+                  {qrError && <p className="text-xs text-pink mt-1">{qrError}</p>}
                 </div>
               ) : (
-                <>
-                  <QRCode value={`REC:${qrUuid}`} size={200} level="Q" />
-                  <p className="text-[10px] text-center text-gray-500 mt-3 max-w-[180px]">
-                    Scan this from the login page on your new device to securely log in. Expires in 5 minutes.
-                  </p>
-                </>
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-xs font-bold text-green mb-1">Scan this QR on your new device</p>
+                  <div className="p-2 bg-white rounded-lg">
+                    <QRCode value={`LINK:${qrUuid}:${qrPwd}`} size={200} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2">QR code expires in 5 minutes.</p>
+                  <button 
+                    onClick={() => { setQrUuid(""); setQrPwd(""); }}
+                    className="text-xs text-green hover:underline mt-2 font-medium"
+                  >
+                    Reset QR Code
+                  </button>
+                </div>
               )}
             </div>
           )}
