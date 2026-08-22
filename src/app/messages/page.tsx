@@ -404,35 +404,44 @@ export default function MessagesPage() {
       text: text, // Show plaintext instantly to sender
       imageUrl: imageUrl, 
       createdAt: new Date().toISOString(),
-      isPending: true
+      isPending: false,
+      status: "sent"
     };
     
+    // Add instantly as if it was sent
     setPendingMessages(prev => [...prev, pendingMsg]);
     
-    try {
-      let success = false;
-      let attempts = 0;
-      
-      while (!success && attempts < 5) {
-        try {
-          const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
-          if (result?.error) throw new Error(result.error);
-          success = true;
-        } catch (err) {
-          attempts++;
-          if (attempts >= 5) throw err;
-          // Wait before retrying (2s, 4s, 6s, 8s) to gracefully handle internet cuts
-          await new Promise(res => setTimeout(res, 2000 * attempts));
+    // Run network tasks in the background asynchronously
+    (async () => {
+      try {
+        let success = false;
+        let attempts = 0;
+        
+        while (!success && attempts < 5) {
+          try {
+            const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload);
+            if (result?.error) throw new Error(result.error);
+            success = true;
+          } catch (err) {
+            attempts++;
+            if (attempts >= 5) throw err;
+            // Wait before retrying (2s, 4s, 6s, 8s) to gracefully handle internet cuts
+            await new Promise(res => setTimeout(res, 2000 * attempts));
+          }
         }
+        
+        // When it succeeds on the server, the Firebase listener will pull it down, 
+        // and we can optionally clear the pending message.
+      } catch(err) {
+        console.error("Failed to send message in background", err);
+      } finally {
+        // We remove the optimistic message so it gets replaced by the real one from Firebase
+        // But only after a delay so it doesn't flicker if Firebase is slow
+        setTimeout(() => {
+          setPendingMessages(prev => prev.filter(m => m.id !== tempId));
+        }, 5000);
       }
-      
-      // Note: We no longer need to manually fetch messages here!
-      // The Firebase onValue listener handles decrypting and updating the state instantly.
-    } catch(err) {
-      console.error("Failed to send message", err);
-    } finally {
-      setPendingMessages(prev => prev.filter(m => m.id !== tempId));
-    }
+    })();
   };
 
   const handleDeleteMessage = async (forEveryone: boolean) => {
