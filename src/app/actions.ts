@@ -674,48 +674,14 @@ export async function backupPrivateKeyAction(encryptedPrivateKey: string) {
   }
 }
 
-export async function generateRecoverySessionAction(masterPassword: string) {
-  const { database, auth } = await import("@/lib/firebase");
+export async function createLinkDeviceTokenAction() {
+  const { auth } = await import("@/lib/firebase");
   const user = await getCurrentUserAction();
   if (!user) return { success: false, error: "Not logged in" };
 
   try {
     const customToken = await auth.createCustomToken(user.id);
-    const uuid = crypto.randomUUID();
-    
-    // Save session in RTDB with a 5-minute expiration
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-    await database.ref(`recoverySessions/${uuid}`).set({
-      token: customToken,
-      masterPassword,
-      expiresAt
-    });
-    
-    return { success: true, uuid };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-}
-
-export async function consumeRecoverySessionAction(uuid: string) {
-  const { database } = await import("@/lib/firebase");
-  try {
-    const ref = database.ref(`recoverySessions/${uuid}`);
-    const snapshot = await ref.once('value');
-    const session = snapshot.val();
-    
-    if (!session) {
-      return { success: false, error: "Invalid or expired session" };
-    }
-    
-    // Immediately delete the session so it can only be used once
-    await ref.remove();
-    
-    if (Date.now() > session.expiresAt) {
-      return { success: false, error: "Session expired" };
-    }
-    
-    return { success: true, token: session.token, masterPassword: session.masterPassword };
+    return { success: true, token: customToken };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

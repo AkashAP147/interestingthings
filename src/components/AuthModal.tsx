@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, ArrowRight, Eye, EyeOff, Camera } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { setUsernameAction, resolveUsernameToEmailAction, consumeRecoverySessionAction, getUserEncryptedPrivateKeyAction } from "@/app/actions";
+import { setUsernameAction, resolveUsernameToEmailAction, getUserEncryptedPrivateKeyAction } from "@/app/actions";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
 import { decryptPrivateKeyWithPassword } from "@/lib/e2ee";
@@ -35,40 +35,59 @@ export function AuthModal() {
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
       (decodedText) => {
-        if (decodedText && decodedText.startsWith("REC:")) {
-          const uuid = decodedText.split(":")[1];
-          if (uuid) {
+        if (decodedText && decodedText.startsWith("LINK:")) {
+          const parts = decodedText.split(":");
+          if (parts.length === 3) {
+            const uuid = parts[1];
+            const encryptionKey = parts[2];
+            
             html5QrCode.stop().then(async () => {
               setIsSubmitting(true);
               try {
-                const res = await consumeRecoverySessionAction(uuid);
-                if (res.success && res.token && res.masterPassword) {
-                  const userCredential = await signInWithCustomToken(auth, res.token);
+                const { database } = await import("@/lib/firebase");
+                const ref = database.ref(`linkSessions/${uuid}`);
+                const snapshot = await ref.once('value');
+                const session = snapshot.val();
+
+                if (!session || Date.now() > session.expiresAt) {
+                  setError("Invalid or expired QR code.");
+                  setIsSubmitting(false);
+                  return;
+                }
+                
+                // delete the session immediately
+                await ref.remove();
+
+                const { decryptPrivateKeyWithPassword } = await import("@/lib/e2ee");
+                const payloadString = await decryptPrivateKeyWithPassword(session.payload, encryptionKey);
+                
+                if (!payloadString) {
+                  setError("Failed to decrypt session.");
+                  setIsSubmitting(false);
+                  return;
+                }
+
+                const payload = JSON.parse(payloadString);
+                
+                if (payload.token && payload.privateKey) {
+                  const userCredential = await signInWithCustomToken(auth, payload.token);
                   
-                  // decrypt key logic
                   const token = await userCredential.user.getIdToken(true);
                   const { syncAuthTokenAction } = await import("@/app/actions");
                   await syncAuthTokenAction(token);
-
-                  // we need to wait a tiny bit for the auth state to settle
-                  setTimeout(async () => {
-                    const encryptedPrivateKey = await getUserEncryptedPrivateKeyAction(userCredential.user.uid);
-                    if (encryptedPrivateKey) {
-                      const payload = JSON.parse(encryptedPrivateKey);
-                      const dec = await decryptPrivateKeyWithPassword(payload, res.masterPassword);
-                      if (dec) {
-                        localStorage.setItem(`privKey_${userCredential.user.uid}`, dec);
-                      }
-                    }
+                  
+                  localStorage.setItem(`privKey_${userCredential.user.uid}`, payload.privateKey);
+                  
+                  setTimeout(() => {
                     window.location.reload();
                   }, 1000);
                   
                 } else {
-                  setError(res.error || "Failed to link device.");
+                  setError("Invalid payload.");
                   setIsSubmitting(false);
                 }
               } catch(e: any) {
-                setError(e.message);
+                setError(e.message || "Failed to link device.");
                 setIsSubmitting(false);
               }
             });
