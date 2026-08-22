@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.vercel.thingsyouneverseen.twa",
+    "sha256_cert_fingerprints": ["7C:F0:A1:89:7E:CE:26:B5:4E:92:EA:C0:4F:37:A7:14:BA:94:3A:53:75:F5:AD:FB:EF:91:F1:12:E5:58:E6:B6"]
+  }
+}]
