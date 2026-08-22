@@ -474,6 +474,37 @@ export async function sendMessageAction(chatId: string, text?: string, imageUrl?
   if (recipientId) {
     const currentUnread = chatData[`unreadCount_${recipientId}`] || 0;
     await chatRef.child(`unreadCount_${recipientId}`).set(currentUnread + 1);
+
+    // Fetch FCM token for recipient
+    const tokenSnap = await database.ref(`fcmTokens/${recipientId}`).once('value');
+    if (tokenSnap.exists()) {
+      const { token } = tokenSnap.val();
+      if (token) {
+        try {
+          const { messaging } = await import("@/lib/firebase");
+          
+          let senderName = "Someone";
+          const senderSnap = await database.ref(`users/${currentUserId}`).once('value');
+          if (senderSnap.exists()) {
+            senderName = senderSnap.val().name || senderSnap.val().username || "Someone";
+          }
+          
+          await messaging.send({
+            token,
+            notification: {
+              title: `New message from ${senderName}`,
+              body: payload ? "🔒 Encrypted Message" : (imageUrl ? "📸 Image" : text?.trim().substring(0, 50) || "New message"),
+            },
+            data: {
+              url: "/messages",
+              chatId
+            }
+          });
+        } catch (e) {
+          console.error("FCM Send Error:", e);
+        }
+      }
+    }
   }
 
   return { success: true };
@@ -1225,4 +1256,21 @@ export async function getSavedPostIdsAction() {
   const savedPostsMeta = savedSnap.val() || [];
   
   return { success: true, savedIds: savedPostsMeta.map((p: any) => p.postId) };
+}
+
+export async function saveFCMTokenAction(token: string) {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("auth_user")?.value;
+  if (!userId) return { success: false, error: "Not logged in" };
+
+  try {
+    const { database } = await import("@/lib/firebase");
+    await database.ref(`fcmTokens/${userId}`).set({
+      token,
+      updatedAt: new Date().toISOString()
+    });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }

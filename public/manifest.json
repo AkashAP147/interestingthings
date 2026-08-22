@@ -1,0 +1,21 @@
+{
+  "name": "The Internet's Most Interesting Things",
+  "short_name": "TIMIT",
+  "description": "Discover the weirdest websites, strangest products, fascinating datasets, and beautiful corners of the internet.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f472b6",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

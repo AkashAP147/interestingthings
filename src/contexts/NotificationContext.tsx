@@ -2,8 +2,10 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getChatsAction, updateUserLocationAction, getNotificationsAction } from "@/app/actions";
+import { getChatsAction, updateUserLocationAction, getNotificationsAction, saveFCMTokenAction } from "@/app/actions";
 import { decryptPayload } from "@/lib/e2ee";
+import { messaging } from "@/lib/firebase-client";
+import { getToken } from "firebase/messaging";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, X } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
@@ -32,6 +34,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if ("Notification" in window) {
         const perm = await Notification.requestPermission();
         setPermission(perm);
+        if (perm === "granted" && messaging) {
+          try {
+            const token = await getToken(messaging, { 
+              vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY 
+            });
+            if (token) {
+              await saveFCMTokenAction(token);
+            }
+          } catch (err) {
+            console.error("FCM Token fetch failed", err);
+          }
+        }
       }
     };
     requestPermission();

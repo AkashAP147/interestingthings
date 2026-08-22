@@ -21,6 +21,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
+  manifest: "/manifest.json",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://interestingthings.app"),
   title: {
     default: "The Internet's Most Interesting Things",
