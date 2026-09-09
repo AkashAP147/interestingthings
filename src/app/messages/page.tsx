@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { startChatAction, sendMessageAction, getChatsAction, markChatsDeliveredAction, markChatReadAction } from "@/app/actions";
-import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock } from "lucide-react";
+import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock, FileText } from "lucide-react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -338,8 +342,24 @@ export default function MessagesPage() {
     try {
       if (file.type.startsWith("image/")) {
         setIsUploading(true);
-        const base64Media = await compressImage(file);
-        await sendOptimisticMessage("", base64Media);
+        const compressedBase64 = await compressImage(file);
+        await sendOptimisticMessage("", compressedBase64);
+        setIsUploading(false);
+      } else if (file.type === "application/pdf") {
+        if (file.size > 5 * 1024 * 1024) {
+           alert("PDF file is too large. Limit is 5MB.");
+           return;
+        }
+        setIsUploading(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64 = event.target?.result as string;
+          await sendOptimisticMessage("", base64);
+          setIsUploading(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        };
+        reader.readAsDataURL(file);
+        return; // Don't clear input instantly, wait for reader
       }
     } catch (err) {
       console.error("Failed to process media", err);
@@ -744,6 +764,14 @@ export default function MessagesPage() {
                           <div className="mb-2 relative w-full overflow-hidden rounded-xl bg-black/10">
                             {msg.imageUrl.startsWith("data:video/") || msg.imageUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
                               <video src={msg.imageUrl} controls playsInline className="max-w-full h-auto max-h-64 rounded-xl" />
+                            ) : msg.imageUrl.startsWith("data:application/pdf") ? (
+                              <a href={msg.imageUrl} download={`document-${msg.id}.pdf`} className={`flex items-center gap-3 p-4 hover:bg-black/5 transition-colors ${!isMine ? 'text-white' : 'text-navy-deep dark:text-white'}`}>
+                                <FileText className="w-8 h-8 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold truncate">PDF Document</p>
+                                  <p className="text-xs opacity-70">Click to download</p>
+                                </div>
+                              </a>
                             ) : (
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img src={msg.imageUrl} alt="Shared media" className="max-w-full h-auto object-contain max-h-64" />
@@ -772,9 +800,33 @@ export default function MessagesPage() {
                           </div>
                         )}
                         {msg.text && (
-                          <p className={`break-words whitespace-pre-wrap ${msg.isDeleted ? (!isMine ? 'italic text-white/70' : 'italic text-gray-400') : ''}`}>
-                            {msg.text}
-                          </p>
+                          <div className={`break-words whitespace-pre-wrap ${msg.isDeleted ? (!isMine ? 'italic text-white/70' : 'italic text-gray-400') : ''}`}>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code({node, inline, className, children, ...props}: any) {
+                                  const match = /language-(\w+)/.exec(className || '');
+                                  return !inline && match ? (
+                                    <SyntaxHighlighter
+                                      style={vscDarkPlus as any}
+                                      language={match[1]}
+                                      PreTag="div"
+                                      className="rounded-md my-2 text-[13px] !bg-black/20"
+                                      {...props}
+                                    >
+                                      {String(children).replace(/\n$/, '')}
+                                    </SyntaxHighlighter>
+                                  ) : (
+                                    <code className={`${className} bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-[13px] font-mono`} {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                              }}
+                            >
+                              {msg.text}
+                            </ReactMarkdown>
+                          </div>
                         )}
                         <span className={`text-[10px] flex items-center justify-end gap-1 mt-1 ${!isMine ? 'text-white/70' : 'text-gray-500'}`}>
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -836,7 +888,7 @@ export default function MessagesPage() {
 
                   <input 
                     type="file" 
-                    accept="image/*,video/*" 
+                    accept="image/*,video/*,application/pdf" 
                     className="hidden" 
                     ref={fileInputRef}
                     onChange={handleMediaUpload}
