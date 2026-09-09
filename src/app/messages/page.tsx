@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { startChatAction, sendMessageAction, getChatsAction, markChatsDeliveredAction, markChatReadAction } from "@/app/actions";
-import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, ImageIcon, Clock, Check, CheckCheck, Lock, FileText } from "lucide-react";
+import { Search, Send, MessageSquare, Loader2, User as UserIcon, ExternalLink, MoreHorizontal, Trash, Smile, Paperclip, Clock, Check, CheckCheck, Lock, FileText } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -73,7 +73,7 @@ export default function MessagesPage() {
               const myKeyIndex = chat.lastMessageSenderId === user.id ? 0 : 1; 
               const decrypted = await decryptPayload(chat.lastMessagePayload, privKey, myKeyIndex);
               if (decrypted) {
-                chat.lastMessage = decrypted.imageUrl ? "📸 Image" : decrypted.text?.substring(0, 50) || "🔒 Encrypted Message";
+                chat.lastMessage = decrypted.imageUrl?.startsWith("data:application/pdf") ? "📄 PDF Document" : (decrypted.imageUrl ? "📸 Image" : decrypted.text?.substring(0, 50) || "🔒 Encrypted Message");
               }
             }
             return chat;
@@ -449,12 +449,17 @@ export default function MessagesPage() {
           }
         }
         
+        let notifText = text;
+        if (!text && imageUrl) {
+          notifText = imageUrl.startsWith("data:application/pdf") ? "📄 PDF Document" : "📸 Image";
+        }
+        
         let success = false;
         let attempts = 0;
         
         while (!success && attempts < 5) {
           try {
-            const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload, undefined, text);
+            const result = await sendMessageAction(activeChatId, finalPlainText, finalImageUrl || undefined, finalPayload, undefined, notifText);
             if (result?.error) throw new Error(result.error);
             success = true;
           } catch (err) {
@@ -899,7 +904,7 @@ export default function MessagesPage() {
                     disabled={isUploading}
                     className="p-2.5 text-gray-400 hover:text-purple transition-colors shrink-0 disabled:opacity-50"
                   >
-                    {isUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImageIcon className="w-6 h-6" />}
+                    {isUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Paperclip className="w-6 h-6" />}
                   </button>
 
                 </div>
